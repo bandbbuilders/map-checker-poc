@@ -116,8 +116,8 @@ function App() {
                      {continuationLayer && showInference && (
                        <img 
                          src={`data:image/png;base64,${continuationLayer}`} 
-                         className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-80 mix-blend-screen" 
-                         alt="inference"
+                         className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-80 mix-blend-screen z-[55] transition-opacity" 
+                         alt="inference-layer"
                        />
                      )}
                    </div>
@@ -125,8 +125,8 @@ function App() {
                    <div className="relative">
                      <img src={originalMapPreview} className={`block max-w-[90vw] max-h-[85vh] object-contain transition-opacity ${isProcessing ? 'opacity-30 blur-sm' : 'opacity-100'}`} alt="preview" />
                      {isProcessing && (
-                        <div className="absolute top-10 left-10 laser-text text-[10px] bg-black/40 p-2 animate-pulse">
-                          {flickerCode}
+                        <div className="absolute top-10 left-10 laser-text text-[10px] bg-black/40 p-2 animate-pulse z-50">
+                          {flickerCode || 'SYSTEM_SCAN_ACTIVE...'}
                         </div>
                      )}
                    </div>
@@ -141,21 +141,30 @@ function App() {
                       </div>
                       <h2 className="text-xl font-black uppercase tracking-widest mb-2 leading-none">Initialize Tactical Feed</h2>
                       <p className="text-[9px] font-mono opacity-60 uppercase mb-8">Drop mapping files, PDF, or GEOTIFF here.</p>
-                      <button className="bg-tactical-primary text-white px-10 py-4 rounded font-black text-xs tracking-[0.5em] hover:bg-green-900 transition-all">UPLOAD_SCAN_FILE</button>
+                      <button className="bg-tactical-primary text-white px-10 py-4 rounded font-black text-xs tracking-[0.4em] hover:bg-green-900 transition-all">UPLOAD_SCAN_FILE</button>
                     </motion.div>
                  )}
                </div>
 
-               {/* Error Pulse Markers */}
+               {/* Tactical Flag Markers */}
                {!isProcessing && markers.map(m => (
                  <div 
                    key={m.id} 
                    style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                   className={`absolute -ml-5 -mt-5 w-10 h-10 flex items-center justify-center error-wireframe border-2 rounded`}
+                   className={`absolute -ml-4 -mt-4 w-8 h-8 flex items-center justify-center group z-[60]`}
                  >
-                    <div className={`w-2 h-2 rounded-full ${m.status === 'WARN' ? 'bg-amber-500' : 'bg-red-500'} pulse`} />
-                    <div className="absolute top-12 left-1/2 -translate-x-1/2 glass-module p-2 text-[8px] font-mono pointer-events-none opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                       [{m.type}] {m.message}
+                    {m.type === 'INPAINTED' ? (
+                       <div className="w-3 h-3 bg-laser-green rounded-full shadow-[0_0_15px_#39FF14] animate-pulse" />
+                    ) : (
+                       <div className="w-8 h-8 error-wireframe rounded flex items-center justify-center bg-rose-500/10">
+                          <div className="w-2 h-2 bg-rose-500 rounded-full animate-ping" />
+                       </div>
+                    )}
+                    
+                    <div className="absolute top-10 left-1/2 -translate-x-1/2 glass-module p-2 text-[8px] font-mono pointer-events-none opacity-0 group-hover:opacity-100 whitespace-nowrap z-[100] border-laser-green/30">
+                       <div className="laser-text mb-1 italic">OBJECT_LOCATED: [{m.x.toFixed(1)}, {m.y.toFixed(1)}]</div>
+                       <div className="opacity-80">STATUS: {m.status}</div>
+                       <div className="text-rose-400 mt-1 uppercase">{m.message}</div>
                     </div>
                  </div>
                ))}
@@ -188,7 +197,7 @@ function App() {
             </GlassModule>
           )}
           <GlassModule className="px-6 py-2 flex flex-col items-end">
-            <div className="text-[10px] font-black text-rose-500 tracking-widest">RESTRICTED_PROTOCOL</div>
+            <div className="text-[10px] font-black text-rose-500 tracking-widest uppercase">Restrict_Prot::ELINT</div>
             <div className="text-[12px] font-mono laser-text mt-0.5">{timestamp}_GMT</div>
           </GlassModule>
           <button onClick={() => setIsLoggedIn(false)} className="glass-module p-4 text-rose-500 hover:bg-rose-500/20"><Power size={20} /></button>
@@ -221,18 +230,20 @@ function App() {
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
                {file && !processedMap && (
                  <button onClick={runAnalysis} className="w-full bg-rose-700/80 hover:bg-rose-600 text-white font-black py-4 mb-4 text-[10px] tracking-[0.3em] uppercase rounded shadow-[0_0_20px_rgba(230,57,70,0.3)] transition-all">
-                    START_COGNITIVE_SCAN
+                    {isProcessing ? 'SCANNING_GEOMETRY...' : 'START_COGNITIVE_SCAN'}
                  </button>
                )}
 
                <SOPAccordionItem 
                  id="SOP-01" label="Interval Inpainting" 
-                 status="OPTIMAL" errors={errors.filter(e => e.type.includes('INTERVAL') || e.status === 'WARN').length} 
+                 status={isProcessing ? "SCANNING..." : (processedMap ? "COMPLETE" : "OPTIMAL")} 
+                 errors={errors.filter(e => e.type === 'INPAINTED').length} 
                  isOpen={activeAccordion === 'SOP-01'} onToggle={() => setActiveAccordion('SOP-01')}
                />
                <SOPAccordionItem 
                  id="SOP-02" label="Contextual Integrity" 
-                 status="INFERENCE_ACTIVE" errors={errors.filter(e => e.type.includes('INTEGRITY')).length}
+                 status={isProcessing ? "SCANNING..." : (processedMap ? "ANALYSIS_DONE" : "INFERENCE_ACTIVE")} 
+                 errors={errors.filter(e => e.type === 'INTEGRITY_ERROR').length}
                  isOpen={activeAccordion === 'SOP-02'} onToggle={() => setActiveAccordion('SOP-02')}
                />
                <SOPAccordionItem id="SOP-03" label="Geometric Alignment" status="STANDBY" isOpen={activeAccordion === 'SOP-03'} onToggle={() => setActiveAccordion('SOP-03')} />
@@ -240,20 +251,21 @@ function App() {
                {errors.length > 0 && (
                  <div className="mt-4 border-t border-tactical-primary/20 pt-4 flex flex-col gap-2">
                     <div className="text-[9px] font-black laser-text mb-2 uppercase italic tracking-widest flex justify-between">Detected_Anomalies ({errors.length}) <Info size={10}/></div>
-                    {errors.map(err => (
+                    {errors.map(err => {
+                       const zl = 4;
+                       return (
                        <div key={err.id} onClick={() => {
-                          const zl = 4;
                           const vW = mapRef.current.clientWidth;
                           const vH = mapRef.current.clientHeight;
                           transformRef.current.setTransform((vW/2) - (err.x/100*vW*zl), (vH/2) - (err.y/100*vH*zl), zl, 800);
-                       }} className={`p-2 border rounded text-[9px] font-mono cursor-pointer transition-all ${err.status === 'WARN' ? 'border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10' : 'border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10'}`}>
+                       }} className={`p-2 border rounded text-[9px] font-mono cursor-pointer transition-all ${err.type === 'INPAINTED' ? 'border-laser-green/30 bg-laser-green/5 hover:bg-laser-green/10' : 'border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10'}`}>
                           <div className="flex justify-between items-center mb-1">
-                             <span className={err.status === 'WARN' ? 'text-amber-500' : 'text-rose-500'}>[{err.type}]</span>
+                             <span className={err.type === 'INPAINTED' ? 'text-laser-green' : 'text-rose-500'}>[{err.type}]</span>
                              <span className="opacity-40">{err.status}</span>
                           </div>
                           <p className="opacity-80 italic">{err.message}</p>
                        </div>
-                    ))}
+                    )})}
                  </div>
                )}
             </div>
