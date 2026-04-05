@@ -178,35 +178,46 @@ function App() {
                    </div>
                 </div>
 
-                <div className="flex-1 relative overflow-hidden flex">
+                <div className="flex-1 relative overflow-hidden flex bg-black">
                   {/* Left: Original Preview Split */}
-                  <div className="w-1/3 border-r border-military-green/20 relative overflow-auto bg-black/20">
-                     <div className="sticky top-0 p-2 text-[8px] bg-black/40 z-10 font-bold text-gray-500 uppercase">Input Stream</div>
-                     <img src={originalMapPreview} className="max-w-none w-full opacity-50 grayscale" />
+                  <div className="w-1/3 border-r border-military-green/20 relative overflow-auto bg-black/40 flex flex-col items-center">
+                     <div className="sticky top-0 w-full p-2 text-[8px] bg-black/60 z-10 font-black text-gray-400 uppercase border-b border-military-green/10">Input Stream (Raw)</div>
+                     {originalMapPreview ? (
+                       <img src={originalMapPreview} className="w-full opacity-40 grayscale" alt="original" />
+                     ) : (
+                       <div className="flex-1 flex items-center justify-center text-[10px] text-gray-700 italic">No input data...</div>
+                     )}
                   </div>
 
                   {/* Right: Processed Viewer with Zoom */}
-                  <div className="flex-1 relative bg-black/10 group">
-                    <TransformWrapper ref={transformRef} limitToBounds minScale={1} centerOnInit>
-                      <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }} contentStyle={{ width: '100%', height: '100%' }}>
-                        <div className="relative w-full h-full cursor-crosshair" ref={mapRef}>
+                  <div className="flex-1 relative bg-black/20 group flex flex-col">
+                    <TransformWrapper ref={transformRef} limitToBounds={false} minScale={0.1} centerOnInit initialScale={1}>
+                      <TransformComponent wrapperStyle={{ width: '100%', height: '100%', flex: 1 }} contentStyle={{ width: '100%', height: '100%' }}>
+                        <div className="relative w-full h-full min-h-[500px] flex items-center justify-center cursor-crosshair" ref={mapRef}>
                            {isProcessing && <div className="radar-v-bar" />}
-                           <img 
-                            src={processedMap || originalMapPreview} 
-                            className={`w-full h-full object-contain transition-opacity duration-1000 ${isProcessing ? 'opacity-40' : 'opacity-100'}`} 
-                          />
-                          {markers.map(m => (
+                           {(processedMap || originalMapPreview) ? (
+                             <img 
+                                src={processedMap || originalMapPreview} 
+                                className={`max-w-full max-h-full object-contain transition-opacity duration-1000 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
+                                alt="processed-output"
+                             />
+                           ) : (
+                             <div className="text-military-green opacity-20"><Loader2 className="animate-spin" /></div>
+                           )}
+                           
+                           {/* Markers / Anomalies */}
+                           {!isProcessing && markers.map(m => (
                             <div 
                               key={m.id} 
                               style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                              className={`absolute -ml-[3px] -mt-[3px] flex items-center justify-center`}
+                              className={`absolute -ml-[3px] -mt-[3px] z-[60]`}
                             >
                                <div className={m.status === 'PASS' ? 'pulsate-pixel-pass' : 'pulsate-pixel'} />
-                               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/90 text-[8px] p-1 border border-white/10 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[8px] p-1 border border-military-green/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-[70]">
                                  {m.message}
                                </div>
                             </div>
-                          ))}
+                           ))}
                         </div>
                       </TransformComponent>
                     </TransformWrapper>
