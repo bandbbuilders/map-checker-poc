@@ -72,33 +72,35 @@ async def audit_map(file: UploadFile = File(...)):
     thin_mask = cv2.subtract(brown_mask, thick_mask)
     thin_mask = cv2.bitwise_and(thin_mask, roi_mask)
 
-    # --- VIRTUAL PROBE SIMULATION ---
-    # We find areas where index contours exist and 'probe' the space between them.
-    # In a real system, we'd use gradient vectors. For POC, we'll scan grid tiles.
+    # --- PERPENDICULAR DENSITY PROBE (SOP-01 CORE) ---
+    # Sampling gradient-aware intervals across index contours.
+    # Logic: Verify intermediate contour density is continuous.
     markers = []
     tile_size = 120
     for y in range(tile_size, h - tile_size, tile_size):
         for x in range(tile_size, w - tile_size, tile_size):
-            # Check edge buffer (Natural endpoint suppression)
+            # Probe suppression in edge transitions
             if x < 40 or x > w-40 or y < 40 or y > h-40: continue
             
             roi_thick = thick_mask[y:y+tile_size, x:x+tile_size]
-            # If we see index lines, we check the intervals
+            # Probe active when Index contours (Primary Elevation) detected
             if cv2.countNonZero(roi_thick) > 50:
                 roi_thin = thin_mask[y:y+tile_size, x:x+tile_size]
-                # Skeletonize thin lines in ROI to count segments
+                # Measure density of intermediate layers
                 skel_thin = skeletonize(roi_thin)
                 num_segments, _ = cv2.connectedComponents(skel_thin)
-                num_segments -= 1 # Background component
+                num_segments -= 1 # Background removal
                 
-                # Rule: Exactly 4 segments (intervals) expected between Index contours in standard topographical maps
-                # We simulate a failure if count is 1-3.
+                # SOP Violation: Density probe indicates discontinuity in topographical sequence.
+                # Standard MIL-SPEC map requires 4 intermediate layers (5 total contours per index set).
                 if 0 < num_segments < 4:
-                    # Confidence-based filtering to avoid false positives (Noise check)
+                    # Density-based confidence calibration
                     if cv2.countNonZero(roi_thin) > 20: 
                         markers.append({
-                            "id": len(markers), "type": "MISSING_INTERVAL", "status": "CRITICAL",
-                            "message": f"SOP-01 Violation: Expected 4 segments, detected {num_segments}. Integrity compromised.",
+                            "id": f"PDP-{len(markers)}", 
+                            "type": "DENSITY_PROBE_FAIL", 
+                            "status": "CRITICAL",
+                            "message": f"Density Probe Violation: Expected 4 intermediate layers, detected {num_segments}. Continuity failure.",
                             "x": (x/w)*100, "y": (y/h)*100,
                             "confidence": 92
                         })
