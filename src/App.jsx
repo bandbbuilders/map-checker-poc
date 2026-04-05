@@ -15,8 +15,12 @@ const AUTH_ID = "HQ_ADMIN";
 const AUTH_PASS = "MA-786-PAK-26";
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [theme, setTheme] = useState('battle'); // battle=dark, recon=light
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('isLoggedIn') === 'true';
+  });
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'battle';
+  });
   
   // Tactical States
   const [timestamp, setTimestamp] = useState(new Date().toISOString().replace('T', ' ').substring(0, 19));
@@ -34,8 +38,13 @@ function App() {
   const mapRef = useRef(null);
   const transformRef = useRef(null);
 
-  // Sync theme
+  // Sync session and theme
   useEffect(() => {
+    localStorage.setItem('isLoggedIn', isLoggedIn);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
     document.documentElement.setAttribute('data-theme', theme === 'recon' ? 'recon' : 'battle');
   }, [theme]);
 
