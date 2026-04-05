@@ -1,16 +1,24 @@
-# React + Vite
+# OPERATION MAP-CHECK (POC V1)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Overview
+Tactical Military Map Auditor for Pakistan Army topographical verification.
 
-Currently, two official plugins are available:
+### Features
+- **SOP-01 (Contour Interval check)**: Validates 4-line rule (4 thin brown lines between thick index lines).
+- **Dual-Pane Tactical UI**: Compare original map with AI-processed layers.
+- **OpenCV Engine**: Automated color segmentation for brown (contours), blue (rivers), and red (grid) lines.
+- **RESTRICTED Dashboard**: High-contrast military UI/UX with real-time coordinate tracking.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Technology Stack
+- **Frontend**: React.js, Tailwind CSS V4, Framer Motion, Lucide Icons.
+- **Backend**: Python FastAPI, OpenCV, NumPy.
+- **deployment**: Vercel Serverless Functions.
 
-## React Compiler
+## Deployment
+Live at: [https://map-checker-poc.vercel.app](https://map-checker-poc.vercel.app)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Local Setup
+1. `cd map-checker-poc`
+2. `npm install`
+3. `npm run dev`
+4. For backend: `uvicorn api.index:app --reload`
