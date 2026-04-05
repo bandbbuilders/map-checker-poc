@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+@theme {
+  --color-military-green: #4B5320;
+  --color-military-gray: #2C3E50;
+  --color-military-red: #FF0000;
+  --color-military-yellow: #FFFF00;
+  --color-tactical-bg: #0D0F0E;
+}
+
+:root {
+  --scanline-color: rgba(75, 83, 32, 0.1);
+}
+
+body {
+  background-color: var(--color-tactical-bg);
+  color: #e2e8f0;
+  margin: 0;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  overflow-x: hidden;
+}
+
+/* CRT Scanline Effect */
+.scanline-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.06),
+    rgba(0, 255, 0, 0.02),
+    rgba(0, 0, 255, 0.06)
+  );
+  background-size: 100% 2px, 3px 100%;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.3;
+}
+
+.glow-red {
+  box-shadow: 0 0 15px var(--color-military-red);
+}
+
+.glow-green {
+  box-shadow: 0 0 15px var(--color-military-green);
+}
+
+/* Radar Scan Animation */
+@keyframes radar-scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.radar-v-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-military-red);
+  box-shadow: 0 0 10px var(--color-military-red);
+  animation: radar-scan 4s linear infinite;
+  z-index: 50;
+}
+
+/* Restricted Glitch Effect */
+@keyframes glitch {
+  0% { transform: translate(0); text-shadow: none; }
+  20% { transform: translate(-2px, 2px); text-shadow: 2px 0 var(--color-military-red), -2px 0 blue; }
+  40% { transform: translate(-2px, -2px); text-shadow: -2px 0 var(--color-military-red), 2px 0 blue; }
+  60% { transform: translate(2px, 2px); text-shadow: 2px 0 var(--color-military-red), -2px 0 blue; }
+  80% { transform: translate(2px, -2px); text-shadow: -2px 0 var(--color-military-red), 2px 0 blue; }
+  100% { transform: translate(0); text-shadow: none; }
+}
+
+.restricted-glitch {
+  animation: glitch 5s infinite;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-tactical-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-military-green);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-military-red);
+}
