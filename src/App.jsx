@@ -47,6 +47,19 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
+  // Hook must be at top level
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: (files) => {
+      if (files[0]) {
+        setFile(files[0]);
+        setOriginalMapPreview(URL.createObjectURL(files[0]));
+        setActiveStep(1);
+      }
+    },
+    noClick: false,
+    multiple: false
+  });
+
   // UI Components
   if (!isLoggedIn) {
      return <LoginScreen setAuth={setIsLoggedIn} theme={theme} />;
@@ -131,17 +144,10 @@ function App() {
               <motion.div 
                 key="upload"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                {...useDropzone({
-                  onDrop: (files) => {
-                    if (files[0]) {
-                      setFile(files[0]);
-                      setOriginalMapPreview(URL.createObjectURL(files[0]));
-                      setActiveStep(1);
-                    }
-                  }
-                }).getRootProps()}
-                className="flex-1 border-2 border-dashed border-military-green/30 military-panel rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-military-green transition-all"
+                {...getRootProps()}
+                className={`flex-1 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all ${isDragActive ? 'border-military-green bg-military-green/5' : 'border-military-green/30 military-panel hover:border-military-green'}`}
               >
+                <input {...getInputProps()} />
                 <div className="w-24 h-24 bg-military-green/10 rounded-full flex items-center justify-center mb-4"><MapIcon className="text-military-green w-10 h-10" /></div>
                 <h2 className="text-xl font-bold tracking-widest uppercase mb-1">Upload Tactical Scan</h2>
                 <p className="text-[10px] text-gray-500 font-mono">SUPPORTED: MAPS, SAT-IMGS, GEOTIFF</p>
