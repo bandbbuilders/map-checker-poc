@@ -56,7 +56,7 @@ function App() {
     return () => clearInterval(interval);
   }, [isProcessing]);
 
-  // --- HARDWARE-ACCELERATED LERP RENDERER (120Hz Smooth) ---
+  // --- HIGH-PERFORMANCE LERP RENDERER (144Hz Ultra-Smooth) ---
   const [currentScale, setCurrentScale] = useState(1);
   const targetScaleRef = useRef(1);
   const renderScaleRef = useRef(1);
@@ -66,7 +66,6 @@ function App() {
     if (!canvas || !mapRef.current) return;
     const ctx = canvas.getContext('2d');
     
-    // Auto-match map image dimensions
     const imgElement = mapRef.current.querySelector('img');
     if (!imgElement) return;
     
@@ -80,37 +79,45 @@ function App() {
       const px = (m.x / 100) * canvas.width;
       const py = (m.y / 100) * canvas.height;
 
-      // MISSION_FOCUS: Only render critical SOP Violations (PDP Core)
-      if (m.type === 'DENSITY_PROBE_FAIL' || m.status === 'CRITICAL') {
-        const size = 60 / scale;
-        ctx.beginPath();
-        ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = '#E63946';
-        ctx.lineWidth = 2 / scale;
-        ctx.rect(px, py, size, size);
-        ctx.stroke();
-        ctx.setLineDash([]);
+      // AUTONOMOUS MISSION FOCUS: Continuity Violations (Orange Pulse)
+      if (m.type === 'CONTINUITY_VIOLATION' || m.status === 'CRITICAL') {
+        const size = 50 / scale;
         
-        ctx.fillStyle = 'rgba(230, 57, 70, 0.05)';
+        ctx.beginPath();
+        ctx.strokeStyle = '#FF8C00'; // Safety Orange
+        ctx.lineWidth = 4 / scale;
+        
+        // Pulsing border effect based on current time
+        const pulse = Math.sin(Date.now() / 200) * 0.5 + 0.5;
+        ctx.globalAlpha = 0.5 + (pulse * 0.5);
+        ctx.rect(px - size/2, py - size/2, size, size);
+        ctx.stroke();
+        
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = '#FF8C00';
         ctx.fill();
+        ctx.globalAlpha = 1.0;
 
         if (scale > 0.4) {
-          ctx.fillStyle = '#E63946';
-          ctx.font = `500 ${Math.max(10, 12/scale)}px JetBrains Mono`;
-          ctx.fillText("! PDP_ANOMALY", px, py - 8);
+          ctx.fillStyle = '#FF8C00';
+          ctx.shadowBlur = 5;
+          ctx.shadowColor = 'rgba(255, 140, 0, 0.5)';
+          ctx.font = `800 ${Math.max(10, 14/scale)}px JetBrains Mono`;
+          ctx.fillText("! CONTINUITY_VIOLATION", px - size/2, py - size/2 - 10);
+          ctx.shadowBlur = 0;
         }
       }
     });
   }, [markers]);
 
-  // High-performance LERP Loop
+  // Ultra-Smooth LERP Loop (144Hz Targeting)
   useEffect(() => {
     let frame;
     const loop = () => {
-      const lerpFactor = 0.15; // Smoothness coefficient
+      const lerpFactor = 0.25; // High-precision smoothness
       const diff = targetScaleRef.current - renderScaleRef.current;
       
-      if (Math.abs(diff) > 0.001) {
+      if (Math.abs(diff) > 0.0001) {
         renderScaleRef.current += diff * lerpFactor;
         drawTacticalLayer();
       }
@@ -297,7 +304,7 @@ function App() {
         <div className={`absolute right-8 top-52 bottom-12 transition-all duration-700 ${isRightPanelCollapsed ? 'w-16' : 'w-96'} pointer-events-none z-[200]`}>
           <GlassModule className="h-full pointer-events-auto flex flex-col overflow-hidden shadow-[-10px_0_40px_rgba(0,0,0,0.2)] border-r border-white/5">
             <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/2">
-               {!isRightPanelCollapsed && <span className="text-[12px] font-black tracking-[0.3em] toxic-neon italic uppercase flex items-center gap-3"><ShieldAlert size={16}/> PDP_ENGINE_BETA</span>}
+               {!isRightPanelCollapsed && <span className="text-[12px] font-black tracking-[0.3em] text-[#FF8C00] italic uppercase flex items-center gap-3"><ShieldAlert size={16}/> RASTER_SCAN_HUB</span>}
                <button onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)} className="p-2 hover:bg-toxic-neon/5 rounded-lg transition-all">
                   <ChevronRight size={24} className={`transition-transform duration-700 ${isRightPanelCollapsed ? 'rotate-180' : ''}`} />
                </button>
@@ -306,16 +313,16 @@ function App() {
             {!isRightPanelCollapsed && (
               <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
                  {file && !processedMap && (
-                   <button onClick={runAnalysis} className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-5 mb-6 text-[12px] tracking-[0.5em] uppercase rounded-sm shadow-[0_0_30px_rgba(230,57,70,0.2)] transition-all">
-                      {isProcessing ? 'CALIBRATING_PROBE...' : 'INIT_PDP_AUDIT'}
+                   <button onClick={runAnalysis} className="w-full bg-[#FF8C00] hover:bg-[#e67e00] text-near-black font-black py-5 mb-6 text-[12px] tracking-[0.5em] uppercase rounded-sm shadow-[0_0_30px_rgba(255,140,0,0.2)] transition-all">
+                      {isProcessing ? 'RASTER_SCAN_ACTIVE...' : 'INIT_AUTONOMOUS_SCAN'}
                    </button>
                  )}
 
                  <SOPAccordionItem 
-                   id="SOP-01" label="Elevation_Density_Probe" 
-                   status={isProcessing ? "SAMPLING..." : (processedMap ? "PROBE_SYNCED" : "READY")} 
-                   confidence={85}
-                   errors={markers.filter(e => e.type === 'DENSITY_PROBE_FAIL').length} 
+                   id="SOP-01" label="Blind_Raster_Search" 
+                   status={isProcessing ? "SCANNING..." : (processedMap ? "SCAN_COMPLETE" : "READY")} 
+                   confidence={97}
+                   errors={markers.filter(e => e.type === 'CONTINUITY_VIOLATION').length} 
                    isOpen={activeAccordion === 'SOP-01'} onToggle={() => setActiveAccordion('SOP-01')}
                  />
                  <SOPAccordionItem 
@@ -329,7 +336,7 @@ function App() {
                  
                  {markers.length > 0 && (
                    <div className="mt-6 border-t border-white/5 pt-6 flex flex-col gap-3">
-                      <div className="text-[11px] font-black toxic-neon mb-4 uppercase italic tracking-[0.3em] flex justify-between border-b border-toxic-neon/10 pb-2">PDP_ANOMALIES ({markers.length}) <Info size={14}/></div>
+                      <div className="text-[11px] font-black text-[#FF8C00] mb-4 uppercase italic tracking-[0.3em] flex justify-between border-b border-[#FF8C00]/10 pb-2">RASTER_ANOMALIES ({markers.length}) <Info size={14}/></div>
                       <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
                         {markers.map(err => (
                            <div key={err.id} onClick={() => {
@@ -337,10 +344,10 @@ function App() {
                               const vH = mapRef.current.clientHeight;
                               const zl = 4;
                               transformRef.current.setTransform((vW/2) - (err.x/100*vW*zl), (vH/2) - (err.y/100*vH*zl), zl, 1000);
-                            }} className={`p-4 glass-module border rounded-sm text-[10px] tactical-mono cursor-pointer transition-all ${err.type === 'DENSITY_PROBE_FAIL' ? 'border-toxic-neon/20 bg-toxic-neon/2 hover:bg-toxic-neon/5' : 'border-rose-500/20 bg-rose-500/2 hover:bg-rose-500/5'}`}>
+                            }} className={`p-4 glass-module border rounded-sm text-[10px] tactical-mono cursor-pointer transition-all ${err.type === 'CONTINUITY_VIOLATION' ? 'border-[#FF8C00]/20 bg-[#FF8C00]/2 hover:bg-[#FF8C00]/5' : 'border-rose-500/20 bg-rose-500/2 hover:bg-rose-500/5'}`}>
                               <div className="flex justify-between items-center mb-2">
-                                 <span className={err.type === 'DENSITY_PROBE_FAIL' ? 'toxic-neon font-bold' : 'text-rose-500 font-bold'}>[{err.type}]</span>
-                                 <span className={`px-2 py-0.5 rounded-full text-[8px] ${err.status === 'RESOLVED' ? 'bg-toxic-neon/10 toxic-neon' : 'bg-rose-500/10 text-rose-500'}`}>{err.status}</span>
+                                 <span className={err.type === 'CONTINUITY_VIOLATION' ? 'text-[#FF8C00] font-bold' : 'text-rose-500 font-bold'}>[{err.type}]</span>
+                                 <span className={`px-2 py-0.5 rounded-full text-[8px] ${err.status === 'RESOLVED' ? 'bg-[#FF8C00]/10 text-[#FF8C00]' : 'bg-rose-500/10 text-rose-500'}`}>{err.status}</span>
                               </div>
                               <p className="secondary-text leading-relaxed uppercase">{err.message}</p>
                            </div>
