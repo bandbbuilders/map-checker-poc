@@ -21,6 +21,14 @@ async def audit_map(file: UploadFile = File(...)):
     if img is None:
         return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
+    orig_h, orig_w, _ = img.shape
+    
+    # Cap resolution for serverless payload stability
+    MAX_RES = 1600
+    if orig_w > MAX_RES or orig_h > MAX_RES:
+        scale = MAX_RES / max(orig_w, orig_h)
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
     h, w, _ = img.shape
     processed = img.copy()
 

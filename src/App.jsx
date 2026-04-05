@@ -59,10 +59,15 @@ function App() {
   // Hook must be at top level
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (files) => {
-      if (files[0]) {
-        setFile(files[0]);
-        setOriginalMapPreview(URL.createObjectURL(files[0]));
-        setActiveStep(1);
+      const selected = files[0];
+      if (selected) {
+        setFile(selected);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setOriginalMapPreview(e.target.result);
+          setActiveStep(1);
+        };
+        reader.readAsDataURL(selected);
       }
     },
     noClick: false,
@@ -70,7 +75,6 @@ function App() {
   });
 
   const resetAudit = () => {
-    if (originalMapPreview) URL.revokeObjectURL(originalMapPreview);
     setFile(null);
     setOriginalMapPreview(null);
     setProcessedMap(null);
