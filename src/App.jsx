@@ -27,6 +27,8 @@ function App() {
   const [file, setFile] = useState(null);
   const [originalMapPreview, setOriginalMapPreview] = useState(null);
   const [processedMap, setProcessedMap] = useState(null);
+  const [continuationLayer, setContinuationLayer] = useState(null);
+  const [showInference, setShowInference] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeStep, setActiveStep] = useState(0); 
   const [flickeringCoords, setFlickeringCoords] = useState("33.7294° N, 73.0931° E");
@@ -78,6 +80,7 @@ function App() {
     setFile(null);
     setOriginalMapPreview(null);
     setProcessedMap(null);
+    setContinuationLayer(null);
     setErrors([]);
     setMarkers([]);
     setActiveStep(0);
@@ -233,11 +236,20 @@ function App() {
                         <div className="relative flex items-center justify-center cursor-crosshair min-w-full min-h-full" ref={mapRef}>
                            {isProcessing && <div className="radar-v-bar" />}
                            {processedMap ? (
-                             <img 
-                                src={processedMap} 
-                                className={`block max-w-full h-auto transition-opacity duration-500 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
-                                alt="processed-output"
-                             />
+                             <div className="relative">
+                               <img 
+                                  src={processedMap} 
+                                  className={`block max-w-full h-auto transition-opacity duration-500 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
+                                  alt="processed-output"
+                               />
+                               {continuationLayer && showInference && (
+                                <img 
+                                  src={`data:image/png;base64,${continuationLayer}`}
+                                  className="absolute inset-0 w-full h-full pointer-events-none opacity-80 mix-blend-screen"
+                                  alt="continuation-overlay"
+                                />
+                               )}
+                             </div>
                            ) : originalMapPreview ? (
                              originalMapPreview.startsWith('data:application/pdf') ? (
                               <div className="flex flex-col items-center gap-4 text-military-green/20">
@@ -262,8 +274,9 @@ function App() {
                               style={{ left: `${m.x}%`, top: `${m.y}%` }}
                               className="absolute -ml-[3px] -mt-[3px] z-[60]"
                             >
-                               <div className={m.status === 'PASS' ? 'pulsate-pixel-pass' : 'pulsate-pixel'} />
-                               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[8px] p-1 border border-military-green/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-[70]">
+                               <div className={m.status === 'WARN' ? 'pulsate-pixel-warn' : 'pulsate-pixel'} />
+                               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[8px] p-2 border border-military-green/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-[70] shadow-2xl rounded">
+                                 <div className="font-black text-military-red mb-1">{m.type}</div>
                                  {m.message}
                                </div>
                             </div>
@@ -275,8 +288,8 @@ function App() {
                     {isProcessing && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-50">
                         <Loader2 className="w-12 h-12 text-military-red animate-spin mb-4" />
-                        <div className="text-xl font-black text-military-red tracking-[0.5em] mb-2 uppercase">Analyzing...</div>
-                        <div className="text-[10px] font-mono text-military-green">{flickeringCoords}</div>
+                        <div className="text-xl font-black text-military-red tracking-[0.5em] mb-2 uppercase italic">Cognitive Decryption...</div>
+                        <div className="text-[10px] font-mono text-military-green uppercase">{flickeringCoords}</div>
                       </div>
                     )}
                   </div>
@@ -287,6 +300,11 @@ function App() {
                    <button onClick={() => transformRef.current.zoomOut()} className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><ZoomOut size={18}/></button>
                    <button onClick={() => transformRef.current.resetTransform()} className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><RotateCcw size={18}/></button>
                    <div className="w-px h-6 bg-military-green/30 mx-1" />
+                   <button onClick={() => setShowInference(!showInference)}
+                      className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2 transition-all ${showInference ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.5)]' : 'text-amber-500 hover:bg-amber-500/10'}`}
+                    >
+                     <Layers size={12} /> AI Layer
+                   </button>
                    <button onClick={() => setShowInspector(!showInspector)}
                       className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2 transition-all ${showInspector ? 'bg-military-green text-white shadow-lg' : 'text-military-green hover:bg-military-green/10'}`}
                     >
@@ -301,8 +319,8 @@ function App() {
         {/* Right Sidebar */}
         <aside className="w-80 flex flex-col gap-6">
           <div className="military-panel p-5 rounded-2xl flex flex-col gap-4">
-             <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black text-military-green uppercase tracking-widest flex items-center gap-2"><ShieldAlert size={12} /> SOP ENGINE 4.0</span>
+             <div className="flex justify-between items-center border-b border-military-green/20 pb-3">
+                <span className="text-[10px] font-black text-military-green uppercase tracking-widest flex items-center gap-2"><ShieldAlert size={12} /> SOP ENGINE 5.0 (AI-PLUS)</span>
                 {isProcessing && <Loader2 size={12} className="text-military-red animate-spin" />}
              </div>
              
@@ -313,6 +331,7 @@ function App() {
                  try {
                    const res = await axios.post('/api/audit', fd);
                    setProcessedMap(`data:image/jpeg;base64,${res.data.image}`);
+                   setContinuationLayer(res.data.layer);
                    setErrors(res.data.errors);
                    setMarkers(res.data.errors);
                  } catch(e) {
@@ -323,14 +342,14 @@ function App() {
                  } finally { setIsProcessing(false); }
                }} 
                className="w-full bg-military-red hover:bg-red-800 text-white py-3 rounded-lg font-black text-xs tracking-widest shadow-lg active:scale-95 transition-all">
-                 RUN ANALYSIS
+                 RUN COGNITIVE ANALYSIS
                </button>
              )}
 
              <div className="space-y-2 mt-2">
-                <SOPItem id="SOP-01" label="Contour Intervals" active={activeSOP === 'SOP-01'} />
-                <SOPItem id="SOP-02" label="Line Integrity" />
-                <SOPItem id="SOP-03" label="Grid Alignment" />
+                <SOPItem id="SOP-01" label="Interval Inpainting" active={activeSOP === 'SOP-01'} />
+                <SOPItem id="SOP-02" label="Contextual Integrity" active={activeSOP === 'SOP-01'} />
+                <SOPItem id="SOP-03" label="Geometric Aligner" />
              </div>
 
              {errors.length > 0 && (
@@ -346,10 +365,13 @@ function App() {
                         const vH = mapRef.current.clientHeight;
                         transformRef.current.setTransform((vW/2) - (err.x/100*vW*zl), (vH/2) - (err.y/100*vH*zl), zl, 1000, "easeInOutQuad");
                       }}
-                      className="p-2 bg-military-red/5 border border-military-red/30 rounded text-[9px] cursor-pointer hover:bg-military-red/10 group"
+                      className={`p-2 border rounded text-[9px] cursor-pointer group transition-all ${err.status === 'WARN' ? 'bg-amber-500/5 border-amber-500/30 hover:bg-amber-500/10' : 'bg-military-red/5 border-military-red/30 hover:bg-military-red/10'}`}
                      >
-                       <div className="flex justify-between font-bold mb-1"><span className="text-military-red">{err.type}</span> <span className="opacity-40">{err.coords || 'ERR-LOC'}</span></div>
-                       <p className="opacity-80 group-hover:opacity-100">{err.message}</p>
+                       <div className="flex justify-between font-bold mb-1">
+                         <span className={err.status === 'WARN' ? 'text-amber-500' : 'text-military-red'}>{err.type}</span> 
+                         <span className="opacity-40">{err.status}</span>
+                       </div>
+                       <p className="opacity-80 group-hover:opacity-100 italic">{err.message}</p>
                      </div>
                    ))}
                  </div>
