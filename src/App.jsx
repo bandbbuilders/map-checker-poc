@@ -33,6 +33,7 @@ function App() {
   const [flickerCode, setFlickerCode] = useState('');
 
   const mapRef = useRef(null);
+  const canvasRef = useRef(null);
   const transformRef = useRef(null);
 
   // Sync session and theme
@@ -54,6 +55,74 @@ function App() {
     return () => clearInterval(interval);
   }, [isProcessing]);
 
+  // --- HARDWARE-ACCELERATED CANVAS RENDERER (60FPS) ---
+  const drawTacticalLayer = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !mapRef.current) return;
+    const ctx = canvas.getContext('2d');
+    const transform = transformRef.current.instance.transformState;
+    const scale = transform?.scale || 1;
+    
+    // Auto-match map image dimensions
+    const imgElement = mapRef.current.querySelector('img');
+    if (!imgElement) return;
+    
+    canvas.width = imgElement.clientWidth;
+    canvas.height = imgElement.clientHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // LOD (Level of Detail) Threshold
+    const isZoomedOut = scale < 0.8;
+    const clusterRadius = 30 / scale;
+    const drawnMarkers = new Set();
+
+    markers.forEach((m, idx) => {
+      if (drawnMarkers.has(idx)) return;
+      const px = (m.x / 100) * canvas.width;
+      const py = (m.y / 100) * canvas.height;
+
+      if (isZoomedOut) {
+        let clusterCount = 1;
+        markers.forEach((m2, idx2) => {
+          if (idx === idx2 || drawnMarkers.has(idx2)) return;
+          const dist = Math.sqrt(Math.pow((m.x - m2.x), 2) + Math.pow((m.y - m2.y), 2));
+          if (dist < clusterRadius) { clusterCount++; drawnMarkers.add(idx2); }
+        });
+        ctx.beginPath();
+        ctx.arc(px, py, 6 + (clusterCount * 0.2), 0, Math.PI * 2);
+        ctx.fillStyle = m.type === 'INPAINTED' ? 'rgba(57, 255, 20, 0.4)' : 'rgba(230, 57, 70, 0.4)';
+        ctx.fill();
+        ctx.strokeStyle = m.type === 'INPAINTED' ? 'rgba(57, 255, 20, 0.8)' : 'rgba(230, 57, 70, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        const size = m.type === 'INPAINTED' ? 4 : 8;
+        ctx.beginPath();
+        if (m.type === 'INPAINTED') {
+          ctx.arc(px, py, size / scale, 0, Math.PI * 2);
+          ctx.fillStyle = '#39FF14';
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#39FF14';
+        } else {
+          ctx.rect(px - (size/2)/scale, py - (size/2)/scale, size/scale, size/scale);
+          ctx.strokeStyle = '#E63946';
+          ctx.lineWidth = 2 / scale;
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(230, 57, 70, 0.2)';
+        }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    });
+  }, [markers]);
+
+  useEffect(() => {
+    if (markers.length > 0) {
+      const frame = requestAnimationFrame(drawTacticalLayer);
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [markers, drawTacticalLayer]);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (files) => {
       const selected = files[0];
@@ -63,7 +132,6 @@ function App() {
         reader.onload = (e) => {
           setOriginalMapPreview(e.target.result);
           setProcessedMap(null);
-          setErrors([]);
           setMarkers([]);
         };
         reader.readAsDataURL(selected);
@@ -76,23 +144,25 @@ function App() {
   const runAnalysis = async () => {
     if (!file) return;
     setIsProcessing(true);
-    setErrors([]);
+    setMarkers([]); 
     const fd = new FormData(); fd.append("file", file);
     try {
       const res = await axios.post('/api/audit', fd);
       setProcessedMap(`data:image/jpeg;base64,${res.data.image}`);
       setContinuationLayer(res.data.layer);
       setErrors(res.data.errors);
-      setMarkers(res.data.errors);
+      // Asynchronous coordinate mapping
+      setTimeout(() => setMarkers(res.data.errors), 100);
     } catch(e) {
-      const errorMsg = e.response?.data?.error || e.message;
-      alert(`TACTICAL SCAN ERROR: ${errorMsg}`);
+      alert(`TACTICAL SCAN ERROR: ${e.message}`);
     } finally { setIsProcessing(false); }
   };
 
   const resetMap = () => {
     setFile(null); setOriginalMapPreview(null); setProcessedMap(null); 
     setErrors([]); setMarkers([]); setContinuationLayer(null);
+    const canvas = canvasRef.current;
+    if (canvas) canvas.getContext('2d').clearRect(0,0, canvas.width, canvas.height);
   };
 
   if (!isLoggedIn) return <LoginScreen setAuth={setIsLoggedIn} />;
@@ -101,16 +171,21 @@ function App() {
     <div className={`fixed inset-0 select-none`}>
       <div className="scanline-hud" />
       
-      {/* 1. MAP CANVAS (Main View - 100%) */}
+      {/* 1. MAP CANVAS (V3.0 Hardware-Accelerated View) */}
       <div className="absolute inset-0 bg-black overflow-hidden digital-grid">
-        <TransformWrapper ref={transformRef} centerOnInit minScale={0.1} maxScale={10} initialScale={1}>
+        <TransformWrapper 
+          ref={transformRef} 
+          centerOnInit 
+          minScale={0.05} 
+          maxScale={12} 
+          onTransformed={drawTacticalLayer}
+          onZoomStop={drawTacticalLayer}
+        >
           <TransformComponent wrapperStyle={{ width: '100vw', height: '100vh' }}>
             <div className="relative flex items-center justify-center min-w-screen min-h-screen" ref={mapRef}>
-               {/* 1. MAP_CRADLE (Bounded Frame) */}
-               <div className="relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,1)] border border-tactical-primary/20 bg-black group select-none">
+               <div className="relative overflow-hidden shadow-[0_0_80px_rgba(3,7,1,1)] border border-tactical-primary/30 bg-black group">
                  {isProcessing && <div className="scanning-lattice z-[70]" />}
                  
-                 {/* Map Base Layer */}
                  <div className="relative">
                    {processedMap ? (
                      <div className="relative">
@@ -118,58 +193,41 @@ function App() {
                        {continuationLayer && showInference && (
                          <img 
                            src={`data:image/png;base64,${continuationLayer}`} 
-                           className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-90 mix-blend-screen z-[55] transition-opacity" 
-                           alt="inference-layer"
+                           className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-90 mix-blend-screen z-[55]" 
+                           alt="inference"
                          />
                        )}
+                       {/* Hardware-Accelerated Overlay */}
+                       <canvas 
+                         ref={canvasRef}
+                         className="absolute inset-0 w-full h-full pointer-events-none z-[60]"
+                       />
                      </div>
                    ) : originalMapPreview ? (
                      <div className="relative">
                        <img src={originalMapPreview} className={`block max-w-[95vw] max-h-[90vh] object-contain transition-opacity ${isProcessing ? 'opacity-30 blur-sm' : 'opacity-100'}`} alt="preview" />
                        {isProcessing && (
-                          <div className="absolute top-10 left-10 laser-text text-[10px] bg-near-black/80 p-3 border border-laser-green/30 animate-pulse z-[80] glass-module">
-                            {flickerCode || 'SYSTEM_SCAN_ACTIVE...'}
+                          <div className="absolute top-10 left-10 laser-text text-[10px] bg-near-black/90 p-4 border border-laser-green/30 animate-pulse z-[80] glass-module shadow-[0_0_30px_rgba(57,255,20,0.1)]">
+                            {flickerCode || 'SYSTEM_SCANING...'}
+                            <div className="mt-2 text-[8px] opacity-40">THREAD::WORKER_ACTIVE</div>
                           </div>
                        )}
                      </div>
                    ) : (
                       <motion.div 
                         key="upload" {...getRootProps()}
-                        className={`w-[600px] h-[400px] border-2 border-dashed glass-module flex flex-col items-center justify-center cursor-pointer hover:border-laser-green ${isDragActive ? 'border-laser-green bg-laser-green/5' : 'border-tactical-primary/40'}`}
+                        className={`w-[650px] h-[450px] border-2 border-dashed glass-module flex flex-col items-center justify-center cursor-pointer hover:border-laser-green ${isDragActive ? 'border-laser-green bg-laser-green/5' : 'border-tactical-primary/40'}`}
                       >
                         <input {...getInputProps()} />
-                        <div className="w-20 h-20 bg-tactical-primary/10 rounded-full flex items-center justify-center mb-6 laser-text">
-                          <MapIcon className="w-10 h-10" />
+                        <div className="w-24 h-24 bg-tactical-primary/10 rounded-full flex items-center justify-center mb-8 laser-text shadow-[inset_0_0_20px_rgba(75,83,32,0.2)]">
+                          <MapIcon className="w-12 h-12" />
                         </div>
-                        <h2 className="text-xl font-black uppercase tracking-tight mb-2 leading-none">Initialize Tactical Feed</h2>
-                        <p className="text-[9px] font-mono opacity-60 uppercase mb-8">Drop mapping files, PDF, or GEOTIFF here.</p>
-                        <button className="bg-tactical-primary text-white px-10 py-4 rounded font-black text-xs tracking-[0.4em] hover:bg-green-900 transition-all">UPLOAD_SCAN_FILE</button>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter mb-2 leading-none italic">Initialize Tactical Cockpit</h2>
+                        <p className="text-[10px] font-mono opacity-40 uppercase mb-10 tracking-[0.2em]">Drop mapping datasets (PDF/TIFF/PNG)</p>
+                        <button className="bg-tactical-primary/80 hover:bg-tactical-primary text-white px-12 py-5 rounded-sm font-black text-[10px] tracking-[0.5em] transition-all border border-tactical-primary/50 shadow-xl">INIT_MISSION_PROTOCOL</button>
                       </motion.div>
                    )}
                  </div>
-
-                 {/* 2. TACTICAL FLAG MARKERS (Clipped to Cradle) */}
-                 {!isProcessing && markers.map(m => (
-                   <div 
-                     key={m.id} 
-                     style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                     className={`absolute -ml-4 -mt-4 w-8 h-8 flex items-center justify-center group z-[60] cursor-pointer`}
-                   >
-                      {m.type === 'INPAINTED' ? (
-                         <div className="w-3 h-3 bg-laser-green rounded-full shadow-[0_0_15px_#39FF14] animate-pulse" />
-                      ) : (
-                         <div className="w-8 h-8 error-wireframe rounded flex items-center justify-center bg-rose-500/10 backdrop-blur-sm">
-                            <div className="w-2 h-2 bg-rose-500 rounded-full animate-ping" />
-                         </div>
-                      )}
-                      
-                      <div className="absolute top-10 left-1/2 -translate-x-1/2 glass-module p-3 text-[9px] font-mono pointer-events-none opacity-0 group-hover:opacity-100 whitespace-nowrap z-[100] border-laser-green/40 shadow-2xl">
-                         <div className="laser-text mb-1 italic tracking-widest border-b border-laser-green/10 pb-1">COORDINATES: [{m.x.toFixed(2)}, {m.y.toFixed(2)}]</div>
-                         <div className="opacity-80 flex justify-between mt-1"><span>STATUS:</span> <span className="text-emerald-400">{m.status}</span></div>
-                         <div className={m.type === 'INPAINTED' ? 'text-laser-green' : 'text-rose-500' + " mt-2 uppercase font-black"}>{m.message}</div>
-                      </div>
-                   </div>
-                 ))}
                </div>
             </div>
           </TransformComponent>
@@ -178,119 +236,128 @@ function App() {
 
       {/* 2. TOP HUD (Priority Z-Layer) */}
       <div className="absolute top-8 inset-x-8 flex justify-between pointer-events-none z-[200]">
-        <GlassModule className="px-6 py-4 flex items-center gap-6 pointer-events-auto">
+        <GlassModule className="px-8 py-5 flex items-center gap-8 pointer-events-auto border-l-4 border-l-laser-green shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
           <div className="relative">
-             <img src="/logo.png" className="w-12 h-12 object-contain mix-blend-screen opacity-90" alt="logo" />
-             <div className="absolute inset-0 border border-laser-green rounded-full animate-ping opacity-20" />
+             <img src="/logo.png" className="w-14 h-14 object-contain mix-blend-screen opacity-100" alt="logo" />
+             <div className="absolute inset-0 border-2 border-laser-green rounded-full animate-ping opacity-10" />
           </div>
-          <div className="flex flex-col border-l border-tactical-primary/30 pl-6">
-            <h1 className="text-xl font-black uppercase tracking-tight italic">Operation <span className="laser-text">Map-Scan</span> <span className="text-[10px] opacity-40 ml-2">V2.0.4</span></h1>
-             <div className="flex gap-4 text-[9px] font-mono tracking-widest opacity-60 items-center mt-1 uppercase">
-                <span className="flex items-center gap-2"><div className="w-1 h-1 bg-laser-green rounded-full pulse" /> Active Terminal: {AUTH_ID}</span>
-                <span className="w-px h-2 bg-tactical-primary/40" />
-                <span>Sector: 33.72° N, 73.09° E</span>
+          <div className="flex flex-col border-l border-tactical-primary/30 pl-8">
+            <h1 className="text-2xl font-black uppercase tracking-tighter italic leading-none">Operation <span className="laser-text">Map-Scan</span> <span className="text-[10px] bg-laser-green text-near-black px-2 py-0.5 ml-2 font-bold not-italic">V3.0.1_BETA</span></h1>
+             <div className="flex gap-6 text-[10px] font-mono tracking-widest opacity-60 items-center mt-2 uppercase">
+                <span className="flex items-center gap-2 font-black text-laser-green"><div className="w-1.5 h-1.5 bg-laser-green rounded-full pulse" /> {AUTH_ID}::LOGGED_IN</span>
+                <span className="w-px h-3 bg-tactical-primary/40" />
+                <span className="flex items-center gap-2"><Maximize2 size={10}/> Sector_Alpha_9</span>
              </div>
           </div>
         </GlassModule>
 
-        <div className="flex items-center gap-4 pointer-events-auto">
+        <div className="flex items-center gap-5 pointer-events-auto">
           {file && (
-            <GlassModule className="px-5 py-3 text-[10px] font-black uppercase flex items-center gap-3 laser-text cursor-pointer hover:bg-laser-green/10" onClick={resetMap}>
-              <RotateCcw size={14} /> Clear Buffer
+            <GlassModule className="px-6 py-4 text-[10px] font-black uppercase flex items-center gap-3 laser-text cursor-pointer hover:bg-laser-green/10 border border-laser-green/20" onClick={resetMap}>
+              <RotateCcw size={16} /> Wipe_Cache
             </GlassModule>
           )}
-          <GlassModule className="px-6 py-2 flex flex-col items-end">
-            <div className="text-[10px] font-black text-rose-500 tracking-widest uppercase">Restrict_Prot::ELINT</div>
-            <div className="text-[12px] font-mono laser-text mt-0.5">{timestamp}_GMT</div>
+          <GlassModule className="px-8 py-3 flex flex-col items-end border-r-4 border-r-rose-700 bg-rose-950/10">
+            <div className="text-[10px] font-black text-rose-500 tracking-[0.3em] uppercase italic">Restricted_Access</div>
+            <div className="text-[14px] font-mono laser-text mt-1">{timestamp}_GMT</div>
           </GlassModule>
-          <button onClick={() => setIsLoggedIn(false)} className="glass-module p-4 text-rose-500 hover:bg-rose-500/20"><Power size={20} /></button>
+          <button onClick={() => setIsLoggedIn(false)} className="glass-module p-5 bg-rose-900/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-xl"><Power size={24} /></button>
         </div>
       </div>
 
-      {/* 3. UNIFIED UTILITY BAR (Left) */}
-      <div className="absolute left-8 top-44 bottom-8 w-20 pointer-events-none">
-        <GlassModule className="h-full flex flex-col items-center py-8 gap-10 overflow-y-auto w-full pointer-events-auto">
-           <ToolbarIcon icon={<Activity size={24}/>} active />
-           <ToolbarIcon icon={<Eye size={24}/>} />
-           <ToolbarIcon icon={<TerminalIcon size={24}/>} />
-           <ToolbarIcon icon={<Layers size={24}/>} />
+      {/* 3. MODULAR UTILITY BAR (Left) */}
+      <div className="absolute left-8 top-52 bottom-12 w-24 pointer-events-none z-[200]">
+        <GlassModule className="h-full flex flex-col items-center py-10 gap-12 overflow-y-auto w-full pointer-events-auto shadow-[10px_0_40px_rgba(0,0,0,0.5)]">
+           <ToolbarIcon icon={<Activity size={28}/>} active />
+           <ToolbarIcon icon={<Eye size={28}/>} />
+           <ToolbarIcon icon={<TerminalIcon size={28}/>} />
+           <ToolbarIcon icon={<Layers size={28}/>} />
            <div className="flex-1" />
-           <ToolbarIcon icon={<Settings size={24}/>} />
+           <ToolbarIcon icon={<Settings size={28}/>} />
         </GlassModule>
       </div>
 
-      {/* 4. SOP ACCORDION PANEL (Right) */}
-      <div className={`absolute right-8 top-44 bottom-8 transition-all duration-500 ${isRightPanelCollapsed ? 'w-12' : 'w-80'} pointer-events-none`}>
-        <GlassModule className="h-full pointer-events-auto flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-tactical-primary/20 flex justify-between items-center bg-tactical-primary/5">
-             {!isRightPanelCollapsed && <span className="text-[10px] font-black tracking-[0.2em] laser-text italic uppercase flex items-center gap-2"><ShieldAlert size={12}/> Control_Protocols</span>}
-             <button onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)} className="p-1 hover:text-laser-green transition-colors">
-                <ChevronRight size={18} className={`transition-transform duration-500 ${isRightPanelCollapsed ? 'rotate-180' : ''}`} />
+      {/* 4. TACTICAL SOP CONSOLE (Right) */}
+      <div className={`absolute right-8 top-52 bottom-12 transition-all duration-700 ${isRightPanelCollapsed ? 'w-16' : 'w-96'} pointer-events-none z-[200]`}>
+        <GlassModule className="h-full pointer-events-auto flex flex-col overflow-hidden shadow-[-10px_0_40px_rgba(0,0,0,0.5)] border-r-4 border-r-tactical-primary">
+          <div className="p-6 border-b border-tactical-primary/20 flex justify-between items-center bg-tactical-primary/10">
+             {!isRightPanelCollapsed && <span className="text-[12px] font-black tracking-[0.3em] laser-text italic uppercase flex items-center gap-3"><ShieldAlert size={16}/> Cockpit_Protocols</span>}
+             <button onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)} className="p-2 hover:bg-laser-green/10 rounded-lg transition-all">
+                <ChevronRight size={24} className={`transition-transform duration-700 ${isRightPanelCollapsed ? 'rotate-180' : ''}`} />
              </button>
           </div>
 
           {!isRightPanelCollapsed && (
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
                {file && !processedMap && (
-                 <button onClick={runAnalysis} className="w-full bg-rose-700/80 hover:bg-rose-600 text-white font-black py-4 mb-4 text-[10px] tracking-[0.3em] uppercase rounded shadow-[0_0_20px_rgba(230,57,70,0.3)] transition-all">
-                    {isProcessing ? 'SCANNING_GEOMETRY...' : 'START_COGNITIVE_SCAN'}
+                 <button onClick={runAnalysis} className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-5 mb-6 text-[12px] tracking-[0.5em] uppercase rounded-sm shadow-[0_0_30px_rgba(230,57,70,0.3)] transition-all animate-pulse">
+                    {isProcessing ? 'SCANNING_NEURAL_NET...' : 'ENGAGE_COGNITIVE_SCAN'}
                  </button>
                )}
 
                <SOPAccordionItem 
-                 id="SOP-01" label="Interval Inpainting" 
-                 status={isProcessing ? "SCANNING..." : (processedMap ? "COMPLETE" : "OPTIMAL")} 
-                 errors={errors.filter(e => e.type === 'INPAINTED').length} 
+                 id="SOP-01" label="Interval_Inpaint_V5" 
+                 status={isProcessing ? "SCANNING..." : (processedMap ? "SYNERGY_SYNCED" : "OPTIMAL_CORES")} 
+                 errors={markers.filter(e => e.type === 'INPAINTED').length} 
                  isOpen={activeAccordion === 'SOP-01'} onToggle={() => setActiveAccordion('SOP-01')}
                />
                <SOPAccordionItem 
-                 id="SOP-02" label="Contextual Integrity" 
-                 status={isProcessing ? "SCANNING..." : (processedMap ? "ANALYSIS_DONE" : "INFERENCE_ACTIVE")} 
-                 errors={errors.filter(e => e.type === 'INTEGRITY_ERROR').length}
+                 id="SOP-02" label="Context_Integrity" 
+                 status={isProcessing ? "PROCESSING..." : (processedMap ? "ISOLATION_DONE" : "STANDBY")} 
+                 errors={markers.filter(e => e.type === 'INTEGRITY_ERROR').length}
                  isOpen={activeAccordion === 'SOP-02'} onToggle={() => setActiveAccordion('SOP-02')}
                />
-               <SOPAccordionItem id="SOP-03" label="Geometric Alignment" status="STANDBY" isOpen={activeAccordion === 'SOP-03'} onToggle={() => setActiveAccordion('SOP-03')} />
+               <div className="flex-1" />
                
-               {errors.length > 0 && (
-                 <div className="mt-4 border-t border-tactical-primary/20 pt-4 flex flex-col gap-2">
-                    <div className="text-[9px] font-black laser-text mb-2 uppercase italic tracking-widest flex justify-between">Detected_Anomalies ({errors.length}) <Info size={10}/></div>
-                    {errors.map(err => {
-                       const zl = 4;
-                       return (
-                       <div key={err.id} onClick={() => {
-                          const vW = mapRef.current.clientWidth;
-                          const vH = mapRef.current.clientHeight;
-                          transformRef.current.setTransform((vW/2) - (err.x/100*vW*zl), (vH/2) - (err.y/100*vH*zl), zl, 800);
-                       }} className={`p-2 border rounded text-[9px] font-mono cursor-pointer transition-all ${err.type === 'INPAINTED' ? 'border-laser-green/30 bg-laser-green/5 hover:bg-laser-green/10' : 'border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10'}`}>
-                          <div className="flex justify-between items-center mb-1">
-                             <span className={err.type === 'INPAINTED' ? 'text-laser-green' : 'text-rose-500'}>[{err.type}]</span>
-                             <span className="opacity-40">{err.status}</span>
-                          </div>
-                          <p className="opacity-80 italic">{err.message}</p>
-                       </div>
-                    )})}
+               {markers.length > 0 && (
+                 <div className="mt-6 border-t border-tactical-primary/30 pt-6 flex flex-col gap-3">
+                    <div className="text-[11px] font-black laser-text mb-4 uppercase italic tracking-[0.3em] flex justify-between border-b border-laser-green/20 pb-2">Mission_Anomalies ({markers.length}) <Info size={14}/></div>
+                    <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                      {markers.map(err => {
+                         const zl = 4;
+                         return (
+                         <div key={err.id} onClick={() => {
+                            const vW = mapRef.current.clientWidth;
+                            const vH = mapRef.current.clientHeight;
+                            transformRef.current.setTransform((vW/2) - (err.x/100*vW*zl), (vH/2) - (err.y/100*vH*zl), zl, 1000);
+                         }} className={`p-3 border rounded-sm text-[10px] font-mono cursor-pointer transition-all backdrop-blur-md ${err.type === 'INPAINTED' ? 'border-laser-green/40 bg-laser-green/5 hover:bg-laser-green/10' : 'border-rose-500/40 bg-rose-500/5 hover:bg-rose-500/10'}`}>
+                            <div className="flex justify-between items-center mb-2">
+                               <span className={err.type === 'INPAINTED' ? 'text-laser-green font-bold' : 'text-rose-500 font-bold'}>[{err.type}]</span>
+                               <span className={`px-2 py-0.5 rounded-full text-[8px] ${err.status === 'RESOLVED' ? 'bg-laser-green/20 text-laser-green' : 'bg-rose-500/20 text-rose-500'}`}>{err.status}</span>
+                            </div>
+                            <p className="opacity-70 leading-relaxed uppercase">{err.message}</p>
+                         </div>
+                      )})}
+                    </div>
                  </div>
                )}
             </div>
           )}
 
           {file && processedMap && !isRightPanelCollapsed && (
-             <div className="p-4 border-t border-tactical-primary/20">
-                <button onClick={() => alert("Decrypting Report...")} className="w-full bg-tactical-primary/20 border border-tactical-primary/50 text-[10px] font-black uppercase laser-text py-4 rounded hover:bg-tactical-primary/30 transition-all flex items-center justify-center gap-3">
-                   <Download size={14}/> Download_Audit_Bin
+             <div className="p-6 border-t border-tactical-primary/20 bg-tactical-primary/5">
+                <button onClick={() => alert("Decrypting Mission Data...")} className="w-full bg-laser-green text-near-black font-black py-5 rounded-sm hover:bg-[#2bff00] transition-all flex items-center justify-center gap-4 text-[12px] tracking-[0.2em] shadow-2xl">
+                   <Download size={18}/> EXFIL_AUDIT_REPORT
                 </button>
              </div>
           )}
         </GlassModule>
       </div>
 
-      {/* Inspector Toggle (Floating Bottom) */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-[9px] font-black laser-text uppercase flex items-center gap-4 bg-black/60 p-2 px-8 rounded-full border border-tactical-primary/30 backdrop-blur-xl">
-         <span className="opacity-40">Zoom_Lvl: {transformRef.current?.instance.transformState.scale.toFixed(2)}x</span>
-         <span className="w-px h-3 bg-tactical-primary/30" />
-         <button onClick={() => setShowInference(!showInference)} className={`transition-all ${showInference ? 'laser-text' : 'opacity-20'}`}>
-            Continuation_Layer::{showInference ? 'ON' : 'OFF'}
+      {/* 5. TACTICAL HUD FOOTER (Telemetry) */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-[10px] font-black laser-text uppercase flex items-center gap-8 bg-near-black/90 px-12 py-3 rounded-full border border-tactical-primary/40 backdrop-blur-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] pointer-events-auto">
+         <div className="flex items-center gap-3">
+           <span className="opacity-40 tracking-widest italic">Zoom_Factor:</span> 
+           <span className="w-12 text-center text-white">{transformRef.current?.instance.transformState.scale.toFixed(2)}x</span>
+         </div>
+         <div className="w-px h-4 bg-tactical-primary/40" />
+         <button onClick={() => setShowInference(!showInference)} className={`flex items-center gap-2 transition-all hover:scale-105 ${showInference ? 'laser-text font-black' : 'opacity-20 translate-y-1'}`}>
+            <Layers size={14}/> Continuation_Grid::{showInference ? 'ACTIVE' : 'DECOUPLED'}
          </button>
+         <div className="w-px h-4 bg-tactical-primary/40" />
+         <div className="flex items-center gap-2 opacity-60">
+            <Monitor size={14}/> GPU_ACCEL::ENABLED
+         </div>
       </div>
     </div>
   );
