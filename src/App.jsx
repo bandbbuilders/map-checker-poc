@@ -317,7 +317,8 @@ function App() {
                    setMarkers(res.data.errors);
                  } catch(e) {
                    console.error("ANALYSIS FAILED:", e);
-                   alert(`TACTICAL SCAN ERROR: ${e.response?.data?.error || e.message}`);
+                   const errorMsg = e.response?.data?.error || e.message || "Unknown tactical failure";
+                   alert(`TACTICAL SCAN ERROR: ${errorMsg}`);
                    setErrors([{ id: 'err', type: 'SYS-ERR', message: "Hardware/API malfunction. Check network.", x: 50, y: 50, coords: "N/A" }]);
                  } finally { setIsProcessing(false); }
                }} 

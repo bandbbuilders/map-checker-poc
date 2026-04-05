@@ -50,7 +50,7 @@ async def audit_map(file: UploadFile = File(...)):
         return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
     orig_h, orig_w, _ = img.shape
-    MAX_RES = 2000 # Increased for better detail
+    MAX_RES = 1200 # Capped for Vercel 10s stability
     if orig_w > MAX_RES or orig_h > MAX_RES:
         scale = MAX_RES / max(orig_w, orig_h)
         img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -60,33 +60,47 @@ async def audit_map(file: UploadFile = File(...)):
 
     # --- COLOR SEGMENTATION (Isolate Brown/Contours) ---
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    lower_brown = np.array([10, 50, 20])
-    upper_brown = np.array([30, 255, 200])
+    lower_brown = np.array([5, 40, 30]) # Wider range for diverse map prints
+    upper_brown = np.array([35, 255, 220])
     brown_mask = cv2.inRange(hsv, lower_brown, upper_brown)
-
-    # Clean up mask
-    brown_mask = cv2.GaussianBlur(brown_mask, (3,3), 0)
-    _, brown_mask = cv2.threshold(brown_mask, 127, 255, cv2.THRESH_BINARY)
 
     errors = []
 
-    # --- SOP-02: REAL LINE CONTINUITY DETECTION ---
-    # 1. Standard Skeletonization (Universal OpenCV)
-    skeleton = np.zeros(brown_mask.shape, np.uint8)
-    element = cv2.getStructuringElement(cv2.MORPH_CROSS, (3,3))
-    temp_mask = brown_mask.copy()
+    # --- SOP-02: FAST LINE CONTINUITY DETECTION ---
+    # We find "broken ends" by comparing the mask with its closed version
+    # and looking for "terminal" blobs
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+    closed = cv2.morphologyEx(brown_mask, cv2.MORPH_CLOSE, kernel)
     
-    while True:
-        eroded = cv2.erode(temp_mask, element)
-        temp = cv2.dilate(eroded, element)
-        temp = cv2.subtract(temp_mask, temp)
-        skeleton = cv2.bitwise_or(skeleton, temp)
-        temp_mask = eroded.copy()
-        if cv2.countNonZero(temp_mask) == 0:
-            break
-
-    # 2. Find endpoints
-    endpoints_img = get_endpoints(skeleton // 255)
+    # Skeletonize the mask to find endpoints effectively
+    # Using a fast 1-pass thinning approximation
+    eroded = cv2.erode(brown_mask, np.ones((3,3), np.uint8), iterations=1)
+    diff = cv2.subtract(brown_mask, eroded)
+    
+    # Focus on the diff regions to find potential breaks
+    contours, _ = cv2.findContours(diff, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if 0.5 < area < 50: # Likely an endpoint or small break
+            M = cv2.moments(cnt)
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                
+                # Check if this endpoint is truly "terminal"
+                # (lone dot on a line end)
+                roi = brown_mask[max(0, cy-10):min(h, cy+10), max(0, cx-10):min(w, cx+10)]
+                if cv2.countNonZero(roi) < 30: # It's a lonely tip!
+                    errors.append({
+                        "id": len(errors) + 1,
+                        "type": "SOP-02",
+                        "message": f"Detected Potential Line Break",
+                        "coords": f"{cx}, {cy}",
+                        "x": (cx / w) * 100,
+                        "y": (cy / h) * 100
+                    })
+                    cv2.circle(processed, (cx, cy), 15, (0, 0, 255), 2)
     
     # 3. Analyze endpoint clusters (lone endpoints away from edges)
     edge_buf = 20
