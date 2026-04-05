@@ -33,7 +33,8 @@ def get_endpoints(skeleton):
     filtered = cv2.filter2D(skel, -1, kernel)
     return (filtered == 11).astype(np.uint8)
 
-def get_tangent(skel, x, y, radius=10):
+def get_tangent(skel, x, y, radius=12):
+    """ Calculate local trajectory vector at (x,y) """
     h, w = skel.shape
     r = radius
     roi = skel[max(0, y-r):min(h, y+r), max(0, x-r):min(w, x+r)]
@@ -62,7 +63,7 @@ async def audit_map(file: UploadFile = File(...)):
 
     if img is None: return JSONResponse(status_code=400, content={"error": "Invalid image"})
 
-    # Resize for processing speed
+    # --- STEP 1: ROI MASKING (Eliminate Ghost Margins) ---
     orig_h, orig_w = img.shape[:2]
     MAX_RES = 1600
     if max(orig_h, orig_w) > MAX_RES:
@@ -70,26 +71,47 @@ async def audit_map(file: UploadFile = File(...)):
         img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     
     h, w = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    roi_mask = np.zeros((h, w), dtype=np.uint8)
+    if contours:
+        c = max(contours, key=cv2.contourArea)
+        cv2.drawContours(roi_mask, [c], -1, 255, -1)
+    else:
+        roi_mask.fill(255) # Fallback
+
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     
-    # SOP-01: Isolate Brown (Contour Layer)
-    brown_mask = cv2.inRange(hsv, np.array([5, 45, 30]), np.array([25, 255, 180]))
+    # --- STEP 2: NOISE REDUCTION (Contour Filtering) ---
+    # Brown Contour Extraction (#4B2C20 approximated in HSV)
+    lower_brown = np.array([5, 40, 20])
+    upper_brown = np.array([25, 255, 180])
+    brown_mask = cv2.inRange(hsv, lower_brown, upper_brown)
     
-    # Skeleton & Endpoints
+    # Apply ROI Mask to eliminate border noise
+    brown_mask = cv2.bitwise_and(brown_mask, roi_mask)
+    
+    # Skeletonization
     skel = skeletonize(brown_mask)
     eps_mask = get_endpoints(skel)
     ey, ex = np.where(eps_mask > 0)
     
     endpoints = []
     for x, y in zip(ex, ey):
-        if 50 < x < w-50 and 50 < y < h-50:
-            endpoints.append({'x': int(x), 'y': int(y), 'angle': get_tangent(skel, x, y)})
+        # Buffer check for map edges
+        if 20 < x < w-20 and 20 < y < h-20:
+            # Cluster check: must have sufficient neighbor density to avoid speckle noise
+            roi = brown_mask[max(0, int(y-10)):min(h, int(y+10)), max(0, int(x-10)):min(w, int(x+10))]
+            if cv2.countNonZero(roi) > 10: 
+                endpoints.append({'x': int(x), 'y': int(y), 'angle': get_tangent(skel, int(x), int(y))})
 
     continuation_layer = np.zeros((h, w, 4), dtype=np.uint8)
     markers = []
     used = set()
     
-    # Match & Inpaint
+    # --- STEP 3: DYNAMIC INPAINTING LOGIC ---
     for i, ep1 in enumerate(endpoints):
         if i in used: continue
         match_idx = -1
@@ -98,32 +120,32 @@ async def audit_map(file: UploadFile = File(...)):
         for j, ep2 in enumerate(endpoints):
             if i == j or j in used: continue
             dist = math.sqrt((ep1['x']-ep2['x'])**2 + (ep1['y']-ep2['y'])**2)
-            if dist < 60: # 50-60 radius
+            if dist < 65: # Search radius
                 angle_diff = abs(ep1['angle'] - ep2['angle'])
                 if angle_diff > math.pi: angle_diff = abs(angle_diff - 2*math.pi)
                 
-                score = dist + (angle_diff * 40)
+                score = dist + (angle_diff * 45)
                 if score < min_score:
                     min_score = score
                     match_idx = j
         
-        if match_idx != -1 and min_score < 120:
+        if match_idx != -1 and min_score < 130:
             ep2 = endpoints[match_idx]
             used.add(i); used.add(match_idx)
-            # Draw Dotted Neon Line (Visual Inpainting)
-            cv2.line(continuation_layer, (ep1['x'], ep1['y']), (ep2['x'], ep2['y']), (57, 255, 20, 200), 2)
+            cv2.line(continuation_layer, (ep1['x'], ep1['y']), (ep2['x'], ep2['y']), (57, 255, 20, 180), 2)
             markers.append({
                 "id": len(markers), "type": "INPAINTED", "status": "RESOLVED",
-                "message": "SOP-01: Line Continuity Restored",
+                "message": "Continuity restored via trajectory matching.",
                 "x": ((ep1['x']+ep2['x'])/2/w)*100, "y": ((ep1['y']+ep2['y'])/2/h)*100
             })
         elif i not in used:
             markers.append({
                 "id": len(markers), "type": "INTEGRITY_ERROR", "status": "CRITICAL",
-                "message": "SOP-01: Physical Line Break Detected",
+                "message": "Physical Line Break: Zero inference crossover data.",
                 "x": (ep1['x']/w)*100, "y": (ep1['y']/h)*100
             })
 
+    # Encode Result
     _, buffer = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 90])
     img_str = base64.b64encode(buffer).decode('utf-8')
     _, layer_buf = cv2.imencode('.png', continuation_layer)

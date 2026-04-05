@@ -105,76 +105,79 @@ function App() {
       <div className="absolute inset-0 bg-black overflow-hidden digital-grid">
         <TransformWrapper ref={transformRef} centerOnInit minScale={0.1} maxScale={10} initialScale={1}>
           <TransformComponent wrapperStyle={{ width: '100vw', height: '100vh' }}>
-            <div className="relative cursor-crosshair flex items-center justify-center min-w-screen min-h-screen" ref={mapRef}>
-               {isProcessing && <div className="scanning-lattice" />}
-               
-               {/* Base Map Frame */}
-               <div className="relative">
-                 {processedMap ? (
-                   <div className="relative">
-                     <img src={processedMap} className="block max-w-[90vw] max-h-[85vh] object-contain" alt="map" />
-                     {continuationLayer && showInference && (
-                       <img 
-                         src={`data:image/png;base64,${continuationLayer}`} 
-                         className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-80 mix-blend-screen z-[55] transition-opacity" 
-                         alt="inference-layer"
-                       />
-                     )}
-                   </div>
-                 ) : originalMapPreview ? (
-                   <div className="relative">
-                     <img src={originalMapPreview} className={`block max-w-[90vw] max-h-[85vh] object-contain transition-opacity ${isProcessing ? 'opacity-30 blur-sm' : 'opacity-100'}`} alt="preview" />
-                     {isProcessing && (
-                        <div className="absolute top-10 left-10 laser-text text-[10px] bg-black/40 p-2 animate-pulse z-50">
-                          {flickerCode || 'SYSTEM_SCAN_ACTIVE...'}
+            <div className="relative flex items-center justify-center min-w-screen min-h-screen" ref={mapRef}>
+               {/* 1. MAP_CRADLE (Bounded Frame) */}
+               <div className="relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,1)] border border-tactical-primary/20 bg-black group select-none">
+                 {isProcessing && <div className="scanning-lattice z-[70]" />}
+                 
+                 {/* Map Base Layer */}
+                 <div className="relative">
+                   {processedMap ? (
+                     <div className="relative">
+                       <img src={processedMap} className="block max-w-[95vw] max-h-[90vh] object-contain" alt="map" />
+                       {continuationLayer && showInference && (
+                         <img 
+                           src={`data:image/png;base64,${continuationLayer}`} 
+                           className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-90 mix-blend-screen z-[55] transition-opacity" 
+                           alt="inference-layer"
+                         />
+                       )}
+                     </div>
+                   ) : originalMapPreview ? (
+                     <div className="relative">
+                       <img src={originalMapPreview} className={`block max-w-[95vw] max-h-[90vh] object-contain transition-opacity ${isProcessing ? 'opacity-30 blur-sm' : 'opacity-100'}`} alt="preview" />
+                       {isProcessing && (
+                          <div className="absolute top-10 left-10 laser-text text-[10px] bg-near-black/80 p-3 border border-laser-green/30 animate-pulse z-[80] glass-module">
+                            {flickerCode || 'SYSTEM_SCAN_ACTIVE...'}
+                          </div>
+                       )}
+                     </div>
+                   ) : (
+                      <motion.div 
+                        key="upload" {...getRootProps()}
+                        className={`w-[600px] h-[400px] border-2 border-dashed glass-module flex flex-col items-center justify-center cursor-pointer hover:border-laser-green ${isDragActive ? 'border-laser-green bg-laser-green/5' : 'border-tactical-primary/40'}`}
+                      >
+                        <input {...getInputProps()} />
+                        <div className="w-20 h-20 bg-tactical-primary/10 rounded-full flex items-center justify-center mb-6 laser-text">
+                          <MapIcon className="w-10 h-10" />
                         </div>
-                     )}
-                   </div>
-                 ) : (
-                    <motion.div 
-                      key="upload" {...getRootProps()}
-                      className={`w-[600px] h-[400px] border-2 border-dashed glass-module flex flex-col items-center justify-center cursor-pointer hover:border-laser-green ${isDragActive ? 'border-laser-green bg-laser-green/5' : 'border-tactical-primary/40'}`}
-                    >
-                      <input {...getInputProps()} />
-                      <div className="w-20 h-20 bg-tactical-primary/10 rounded-full flex items-center justify-center mb-6 laser-text">
-                        <MapIcon className="w-10 h-10" />
-                      </div>
-                      <h2 className="text-xl font-black uppercase tracking-widest mb-2 leading-none">Initialize Tactical Feed</h2>
-                      <p className="text-[9px] font-mono opacity-60 uppercase mb-8">Drop mapping files, PDF, or GEOTIFF here.</p>
-                      <button className="bg-tactical-primary text-white px-10 py-4 rounded font-black text-xs tracking-[0.4em] hover:bg-green-900 transition-all">UPLOAD_SCAN_FILE</button>
-                    </motion.div>
-                 )}
-               </div>
-
-               {/* Tactical Flag Markers */}
-               {!isProcessing && markers.map(m => (
-                 <div 
-                   key={m.id} 
-                   style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                   className={`absolute -ml-4 -mt-4 w-8 h-8 flex items-center justify-center group z-[60]`}
-                 >
-                    {m.type === 'INPAINTED' ? (
-                       <div className="w-3 h-3 bg-laser-green rounded-full shadow-[0_0_15px_#39FF14] animate-pulse" />
-                    ) : (
-                       <div className="w-8 h-8 error-wireframe rounded flex items-center justify-center bg-rose-500/10">
-                          <div className="w-2 h-2 bg-rose-500 rounded-full animate-ping" />
-                       </div>
-                    )}
-                    
-                    <div className="absolute top-10 left-1/2 -translate-x-1/2 glass-module p-2 text-[8px] font-mono pointer-events-none opacity-0 group-hover:opacity-100 whitespace-nowrap z-[100] border-laser-green/30">
-                       <div className="laser-text mb-1 italic">OBJECT_LOCATED: [{m.x.toFixed(1)}, {m.y.toFixed(1)}]</div>
-                       <div className="opacity-80">STATUS: {m.status}</div>
-                       <div className="text-rose-400 mt-1 uppercase">{m.message}</div>
-                    </div>
+                        <h2 className="text-xl font-black uppercase tracking-tight mb-2 leading-none">Initialize Tactical Feed</h2>
+                        <p className="text-[9px] font-mono opacity-60 uppercase mb-8">Drop mapping files, PDF, or GEOTIFF here.</p>
+                        <button className="bg-tactical-primary text-white px-10 py-4 rounded font-black text-xs tracking-[0.4em] hover:bg-green-900 transition-all">UPLOAD_SCAN_FILE</button>
+                      </motion.div>
+                   )}
                  </div>
-               ))}
+
+                 {/* 2. TACTICAL FLAG MARKERS (Clipped to Cradle) */}
+                 {!isProcessing && markers.map(m => (
+                   <div 
+                     key={m.id} 
+                     style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                     className={`absolute -ml-4 -mt-4 w-8 h-8 flex items-center justify-center group z-[60] cursor-pointer`}
+                   >
+                      {m.type === 'INPAINTED' ? (
+                         <div className="w-3 h-3 bg-laser-green rounded-full shadow-[0_0_15px_#39FF14] animate-pulse" />
+                      ) : (
+                         <div className="w-8 h-8 error-wireframe rounded flex items-center justify-center bg-rose-500/10 backdrop-blur-sm">
+                            <div className="w-2 h-2 bg-rose-500 rounded-full animate-ping" />
+                         </div>
+                      )}
+                      
+                      <div className="absolute top-10 left-1/2 -translate-x-1/2 glass-module p-3 text-[9px] font-mono pointer-events-none opacity-0 group-hover:opacity-100 whitespace-nowrap z-[100] border-laser-green/40 shadow-2xl">
+                         <div className="laser-text mb-1 italic tracking-widest border-b border-laser-green/10 pb-1">COORDINATES: [{m.x.toFixed(2)}, {m.y.toFixed(2)}]</div>
+                         <div className="opacity-80 flex justify-between mt-1"><span>STATUS:</span> <span className="text-emerald-400">{m.status}</span></div>
+                         <div className={m.type === 'INPAINTED' ? 'text-laser-green' : 'text-rose-500' + " mt-2 uppercase font-black"}>{m.message}</div>
+                      </div>
+                   </div>
+                 ))}
+               </div>
             </div>
           </TransformComponent>
         </TransformWrapper>
       </div>
 
-      {/* 2. TOP HUD (Floating) */}
-      <div className="absolute top-8 inset-x-8 flex justify-between pointer-events-none">
+      {/* 2. TOP HUD (Priority Z-Layer) */}
+      <div className="absolute top-8 inset-x-8 flex justify-between pointer-events-none z-[200]">
         <GlassModule className="px-6 py-4 flex items-center gap-6 pointer-events-auto">
           <div className="relative">
              <img src="/logo.png" className="w-12 h-12 object-contain mix-blend-screen opacity-90" alt="logo" />
