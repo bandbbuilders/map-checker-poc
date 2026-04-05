@@ -167,13 +167,13 @@ function App() {
     if (canvas) canvas.getContext('2d').clearRect(0,0, canvas.width, canvas.height);
   };
 
-  // Login Sequence (The Unveiling)
+  // Login Sequence (The Wipe-Clean)
   const handleAuthSuccess = () => {
     setIsUnveiling(true);
     setTimeout(() => {
       setIsLoggedIn(true);
       setIsUnveiling(false);
-    }, 500); // Exactly 500ms
+    }, 1200); // 1.2s "Wipe-Clean" duration as requested
   };
 
   return (
@@ -187,7 +187,7 @@ function App() {
         )}
       </AnimatePresence>
 
-      <div className={`fixed inset-0 select-none bg-near-black ${!isLoggedIn ? 'overflow-hidden' : ''}`}>
+      <div className={`fixed inset-0 select-none bg-near-black ${!isLoggedIn ? 'overflow-hidden' : ''}`} style={{ zIndex: 1 }}>
         {/* 1. MAP CANVAS */}
         <div className="absolute inset-0 bg-black overflow-hidden digital-grid">
           <TransformWrapper 
@@ -210,11 +210,12 @@ function App() {
                         {continuationLayer && showInference && (
                           <img 
                             src={`data:image/png;base64,${continuationLayer}`} 
-                            className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-90 mix-blend-screen z-[55]" 
-                            alt="inference"
+                            className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-100 mix-blend-screen z-[55]" 
+                            style={{ filter: 'drop-shadow(0 0 5px rgba(57, 255, 20, 0.4))' }}
+                            alt="pdp-hallucination-layer"
                           />
                         )}
-                        {/* Hardware-Accelerated Overlay */}
+                        {/* Hardware-Accelerated High-Frequency HUD Overlay */}
                         <canvas 
                           ref={canvasRef}
                           className="absolute inset-0 w-full h-full pointer-events-none z-[60]"
@@ -395,11 +396,12 @@ const LoginOverlay = ({ isUnveiling, onSuccess }) => {
   };
 
   return (
-    <div className={`frost-overlay ${isUnveiling ? 'fade-unveil' : ''}`}>
+    <div className={`military-frosted-glass ${isUnveiling ? 'wipe-clean' : ''}`}>
+      <div className="noise-overlay" />
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, transition: { duration: 0.8 } }}
         className="login-card"
       >
         <div className="flex flex-col items-center mb-10">
@@ -450,7 +452,7 @@ const LoginOverlay = ({ isUnveiling, onSuccess }) => {
           </div>
 
           <button type="submit" className="login-button mt-4 shadow-[0_0_30px_rgba(57,255,20,0.2)]">
-            INIT_UNVEIL_PROTOCOL
+            INIT_MISSION_PROTOCOL
           </button>
         </form>
 
