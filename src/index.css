@@ -2,22 +2,35 @@
 
 @theme {
   --color-military-green: #006600;
-  --color-military-gray: #121513;
   --color-military-red: #E63946;
   --color-military-yellow: #FFB703;
-  --color-tactical-bg: #050706;
 }
 
 :root {
-  --scanline-color: rgba(75, 83, 32, 0.1);
+  --tactical-bg: #050706;
+  --panel-bg: rgba(18, 21, 19, 0.6);
+  --border-color: rgba(0, 102, 0, 0.3);
+  --text-main: #e2e8f0;
+  --text-dim: #94a3b8;
+  --scanline-opacity: 0.3;
+}
+
+[data-theme='recon'] {
+  --tactical-bg: #f8fafc;
+  --panel-bg: rgba(241, 245, 249, 0.8);
+  --border-color: rgba(0, 102, 0, 0.2);
+  --text-main: #0f172a;
+  --text-dim: #475569;
+  --scanline-opacity: 0.05;
 }
 
 body {
-  background-color: var(--color-tactical-bg);
-  color: #e2e8f0;
+  background-color: var(--tactical-bg);
+  color: var(--text-main);
   margin: 0;
   font-family: 'JetBrains Mono', 'Courier New', monospace;
   overflow-x: hidden;
+  transition: background-color 0.5s ease, color 0.5s ease;
 }
 
 /* CRT Scanline Effect */
@@ -29,17 +42,17 @@ body {
   height: 100%;
   background: linear-gradient(
     rgba(18, 16, 16, 0) 50%,
-    rgba(0, 0, 0, 0.25) 50%
+    rgba(0, 0, 0, 0.1) 50%
   ), linear-gradient(
     90deg,
-    rgba(255, 0, 0, 0.06),
-    rgba(0, 255, 0, 0.02),
-    rgba(0, 0, 255, 0.06)
+    rgba(0, 102, 0, 0.02),
+    rgba(0, 102, 0, 0.01),
+    rgba(0, 102, 0, 0.02)
   );
   background-size: 100% 2px, 3px 100%;
   pointer-events: none;
   z-index: 1000;
-  opacity: 0.3;
+  opacity: var(--scanline-opacity);
 }
 
 .glow-red {
@@ -71,10 +84,10 @@ body {
 /* Restricted Glitch Effect */
 @keyframes glitch {
   0% { transform: translate(0); text-shadow: none; }
-  20% { transform: translate(-2px, 2px); text-shadow: 2px 0 var(--color-military-red), -2px 0 blue; }
-  40% { transform: translate(-2px, -2px); text-shadow: -2px 0 var(--color-military-red), 2px 0 blue; }
-  60% { transform: translate(2px, 2px); text-shadow: 2px 0 var(--color-military-red), -2px 0 blue; }
-  80% { transform: translate(2px, -2px); text-shadow: -2px 0 var(--color-military-red), 2px 0 blue; }
+  20% { transform: translate(-1px, 1px); }
+  40% { transform: translate(-1px, -1px); }
+  60% { transform: translate(1px, 1px); }
+  80% { transform: translate(1px, -1px); }
   100% { transform: translate(0); text-shadow: none; }
 }
 
@@ -82,16 +95,51 @@ body {
   animation: glitch 5s infinite;
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
+.military-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  backdrop-blur: 10px;
+}
+
+/* Focused Dot Marker */
+@keyframes pulse-dot {
+  0% { transform: scale(0.8); opacity: 1; box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.7); }
+  70% { transform: scale(1.2); opacity: 0.8; box-shadow: 0 0 20px 10px rgba(230, 57, 70, 0); }
+  100% { transform: scale(0.8); opacity: 1; box-shadow: 0 0 0 0 rgba(230, 57, 70, 0); }
+}
+
+.pulsate-pixel {
   width: 6px;
+  height: 6px;
+  background: var(--color-military-red);
+  border-radius: 50%;
+  animation: pulse-dot 1.5s infinite;
+  border: 1px solid white;
+}
+
+.pulsate-pixel-pass {
+  width: 6px;
+  height: 6px;
+  background: var(--color-military-green);
+  border-radius: 50%;
+  animation: pulse-dot 1.5s infinite; /* using same keyframes but color differs via style */
+  box-shadow: 0 0 0 0 rgba(0, 102, 0, 0.7); 
+  animation-name: pulse-dot-green;
+}
+
+@keyframes pulse-dot-green {
+  0% { transform: scale(0.8); opacity: 1; box-shadow: 0 0 0 0 rgba(0, 102, 0, 0.7); }
+  70% { transform: scale(1.2); opacity: 0.8; box-shadow: 0 0 20px 10px rgba(0, 102, 0, 0); }
+  100% { transform: scale(0.8); opacity: 1; box-shadow: 0 0 0 0 rgba(0, 102, 0, 0); }
+}
+
+::-webkit-scrollbar {
+  width: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-tactical-bg);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-military-green);
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-military-red);
+  border-radius: 10px;
 }
