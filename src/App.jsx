@@ -316,12 +316,9 @@ function App() {
                    setErrors(res.data.errors);
                    setMarkers(res.data.errors);
                  } catch(e) {
-                   // Fallback logic
-                   setTimeout(() => {
-                     setProcessedMap(originalMapPreview);
-                     const errs = [{ id: 1, type: "SOP-01", message: "Discontinuity @ 33.72/73.09", x: 45, y: 30 }];
-                     setErrors(errs); setMarkers(errs);
-                   }, 2000);
+                   console.error("ANALYSIS FAILED:", e);
+                   alert(`TACTICAL SCAN ERROR: ${e.response?.data?.error || e.message}`);
+                   setErrors([{ id: 'err', type: 'SYS-ERR', message: "Hardware/API malfunction. Check network.", x: 50, y: 50, coords: "N/A" }]);
                  } finally { setIsProcessing(false); }
                }} 
                className="w-full bg-military-red hover:bg-red-800 text-white py-3 rounded-lg font-black text-xs tracking-widest shadow-lg active:scale-95 transition-all">

@@ -71,9 +71,20 @@ async def audit_map(file: UploadFile = File(...)):
     errors = []
 
     # --- SOP-02: REAL LINE CONTINUITY DETECTION ---
-    # 1. Skeletonize to 1px wide lines
-    skeleton = cv2.ximgproc.thinning(brown_mask, thinningType=cv2.ximgproc.THINNING_ZHANGSUEN)
+    # 1. Standard Skeletonization (Universal OpenCV)
+    skeleton = np.zeros(brown_mask.shape, np.uint8)
+    element = cv2.getStructuringElement(cv2.MORPH_CROSS, (3,3))
+    temp_mask = brown_mask.copy()
     
+    while True:
+        eroded = cv2.erode(temp_mask, element)
+        temp = cv2.dilate(eroded, element)
+        temp = cv2.subtract(temp_mask, temp)
+        skeleton = cv2.bitwise_or(skeleton, temp)
+        temp_mask = eroded.copy()
+        if cv2.countNonZero(temp_mask) == 0:
+            break
+
     # 2. Find endpoints
     endpoints_img = get_endpoints(skeleton // 255)
     
