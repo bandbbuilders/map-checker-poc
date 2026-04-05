@@ -141,20 +141,20 @@ async def audit_map(file: UploadFile = File(...)):
             # Continuation Validation Logic
             if random.random() > 0.4:
                 errors.append({
-                    "id": len(errors)+1, "type": "WARNING", "status": "WARN",
+                    "id": len(errors)+1, "type": "INTERVAL_GAP", "status": "WARN",
                     "message": "Validation Warning: Path inferred through obscuration layer.",
                     "x": (ep1['x']/w)*100, "y": (ep1['y']/h)*100
                 })
             else:
                 errors.append({
-                    "id": len(errors)+1, "type": "INTEGRITY", "status": "FAIL",
+                    "id": len(errors)+1, "type": "CONT_INTEGRITY", "status": "FAIL",
                     "message": "Integrity Error: Unconfirmed path intersection.",
                     "x": (ep1['x']/w)*100, "y": (ep1['y']/h)*100
                 })
         else:
             if i not in used_eps:
                 errors.append({
-                    "id": len(errors)+1, "type": "INTEGRITY", "status": "FAIL",
+                    "id": len(errors)+1, "type": "CONT_INTEGRITY", "status": "FAIL",
                     "message": "Integrity Error: Physical line break (Zero Inference Data)",
                     "x": (ep1['x']/w)*100, "y": (ep1['y']/h)*100
                 })

@@ -5,7 +5,7 @@ import {
   Map as MapIcon, Loader2, Info, Eye, Layers, 
   ShieldAlert, Settings, FileText, ChevronRight,
   Maximize2, ZoomIn, ZoomOut, RotateCcw, Lock, User,
-  Power, Moon, Sun, Monitor
+  Power, Moon, Sun, Monitor, Activity, Terminal as TerminalIcon
 } from 'lucide-react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,50 +15,45 @@ const AUTH_ID = "HQ_ADMIN";
 const AUTH_PASS = "MA-786-PAK-26";
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('isLoggedIn') === 'true';
-  });
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('theme') || 'battle';
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'battle');
   
   // Tactical States
-  const [timestamp, setTimestamp] = useState(new Date().toISOString().replace('T', ' ').substring(0, 19));
+  const [timestamp, setTimestamp] = useState(new Date().toISOString().substring(0, 19));
   const [file, setFile] = useState(null);
   const [originalMapPreview, setOriginalMapPreview] = useState(null);
   const [processedMap, setProcessedMap] = useState(null);
   const [continuationLayer, setContinuationLayer] = useState(null);
-  const [showInference, setShowInference] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeStep, setActiveStep] = useState(0); 
-  const [flickeringCoords, setFlickeringCoords] = useState("33.7294° N, 73.0931° E");
   const [errors, setErrors] = useState([]);
-  const [showInspector, setShowInspector] = useState(false);
-  const [activeSOP, setActiveSOP] = useState("SOP-01");
   const [markers, setMarkers] = useState([]);
-  
+  const [showInference, setShowInference] = useState(true);
+  const [activeAccordion, setActiveAccordion] = useState('SOP-01');
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
+  const [flickerCode, setFlickerCode] = useState('');
+
   const mapRef = useRef(null);
   const transformRef = useRef(null);
 
   // Sync session and theme
-  useEffect(() => {
-    localStorage.setItem('isLoggedIn', isLoggedIn);
-  }, [isLoggedIn]);
-
-  useEffect(() => {
+  useEffect(() => { localStorage.setItem('isLoggedIn', isLoggedIn); }, [isLoggedIn]);
+  useEffect(() => { 
     localStorage.setItem('theme', theme);
-    document.documentElement.setAttribute('data-theme', theme === 'recon' ? 'recon' : 'battle');
+    document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Clock
+  // HUD Update Loop (Flicker code)
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimestamp(new Date().toISOString().replace('T', ' ').substring(0, 19));
+    const codes = ["SCANNING... CONTOUR_INTEGRITY_CHECK [OK]", "MAPPING_TEXTURE... (BROWN_SEGMENT_5.4)", "ELEVATION_EXTRAPOLATION_INIT...", "SKELETON_PASS_COMPLETED.", "GEOMETRIC_INFERENCE_ENGINE_V5_STABLE"];
+    const interval = setInterval(() => {
+      setTimestamp(new Date().toISOString().substring(11, 19));
+      if (isProcessing) {
+        setFlickerCode(codes[Math.floor(Math.random() * codes.length)]);
+      }
     }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    return () => clearInterval(interval);
+  }, [isProcessing]);
 
-  // Hook must be at top level
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (files) => {
       const selected = files[0];
@@ -67,7 +62,9 @@ function App() {
         const reader = new FileReader();
         reader.onload = (e) => {
           setOriginalMapPreview(e.target.result);
-          setActiveStep(1);
+          setProcessedMap(null);
+          setErrors([]);
+          setMarkers([]);
         };
         reader.readAsDataURL(selected);
       }
@@ -76,395 +73,281 @@ function App() {
     multiple: false
   });
 
-  const resetAudit = () => {
-    setFile(null);
-    setOriginalMapPreview(null);
-    setProcessedMap(null);
-    setContinuationLayer(null);
+  const runAnalysis = async () => {
+    if (!file) return;
+    setIsProcessing(true);
     setErrors([]);
-    setMarkers([]);
-    setActiveStep(0);
-    setIsProcessing(false);
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      const res = await axios.post('/api/audit', fd);
+      setProcessedMap(`data:image/jpeg;base64,${res.data.image}`);
+      setContinuationLayer(res.data.layer);
+      setErrors(res.data.errors);
+      setMarkers(res.data.errors);
+    } catch(e) {
+      const errorMsg = e.response?.data?.error || e.message;
+      alert(`TACTICAL SCAN ERROR: ${errorMsg}`);
+    } finally { setIsProcessing(false); }
   };
 
-  // UI Components
-  if (!isLoggedIn) {
-     return <LoginScreen setAuth={setIsLoggedIn} theme={theme} />;
-  }
+  const resetMap = () => {
+    setFile(null); setOriginalMapPreview(null); setProcessedMap(null); 
+    setErrors([]); setMarkers([]); setContinuationLayer(null);
+  };
+
+  if (!isLoggedIn) return <LoginScreen setAuth={setIsLoggedIn} />;
 
   return (
-    <div className={`min-h-screen flex flex-col relative`}>
-      <div className="scanline-overlay" />
+    <div className={`fixed inset-0 select-none`}>
+      <div className="scanline-hud" />
       
-      {/* Header - Tactical HUD */}
-      <header className="h-20 border-b border-military-green/50 military-panel flex items-center justify-between px-8 z-50">
-        <div className="flex items-center gap-6">
-          <div className="relative group cursor-pointer">
-             <img 
-               src="/logo.png" 
-               alt="PA HQ Logo" 
-               className={`w-14 h-14 object-contain transition-transform duration-500 hover:scale-110 ${theme === 'battle' ? 'mix-blend-screen' : 'invert mix-blend-multiply opacity-80'}`} 
-             />
-             <div className="absolute inset-0 w-full h-full border border-military-green rounded-full animate-ping opacity-10" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tighter uppercase whitespace-nowrap">
-              OPERATION <span className="text-military-green">MAP-SCAN</span>
-            </h1>
-            <div className="flex gap-4 text-[10px] items-center text-military-green font-bold uppercase tracking-widest">
-              <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-military-green rounded-full pulse" /> {theme.toUpperCase()} MODE</span>
-              <span className="w-1 h-1 bg-gray-500 rounded-full" />
-              <span>{AUTH_ID}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          {/* Next Map Button */}
-          {file && (
-            <button 
-              onClick={resetAudit}
-              className="flex items-center gap-2 px-4 py-2 bg-military-green/20 hover:bg-military-green/40 border border-military-green/50 text-military-green text-[10px] font-black uppercase rounded-lg transition-all"
-            >
-              <RotateCcw size={14} /> Next Map
-            </button>
-          )}
-
-          {/* Theme Toggler */}
-          <button 
-            onClick={() => setTheme(theme === 'battle' ? 'recon' : 'battle')}
-            className="p-2 border border-military-green/30 hover:bg-military-green/10 rounded transition-all text-military-green"
-            title="Toggle Recon/Battle Mode"
-          >
-            {theme === 'battle' ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
-
-          <div className="flex flex-col items-end">
-            <div className="bg-military-red/10 border border-military-red/50 text-military-red text-xs px-4 py-1 font-black restricted-glitch shadow-[0_0_10px_rgba(255,0,0,0.1)]">
-              RESTRICTED - FOR OFFICIAL USE
-            </div>
-            <div className="text-[10px] mt-1 text-military-green font-mono opacity-80">{timestamp}</div>
-          </div>
-
-          <button 
-            onClick={() => setIsLoggedIn(false)}
-            className="p-2 text-military-red hover:bg-military-red/10 rounded border border-military-red/20"
-            title="Log out"
-          >
-            <Power size={20} />
-          </button>
-        </div>
-      </header>
-
-      {/* Main Tactical Interface */}
-      <main className="flex-1 flex overflow-hidden p-6 gap-6 z-40 bg-transparent">
-        
-        {/* Left Toolbar */}
-        <nav className="w-16 flex flex-col gap-4 py-4 items-center military-panel rounded-xl">
-          <button onClick={() => setActiveStep(0)} className={`p-3 rounded-lg transition-colors ${activeStep === 0 ? 'bg-military-green text-white glow-green' : 'hover:bg-military-green/10 text-gray-500'}`}>
-            <MapIcon size={24} />
-          </button>
-          <button className={`p-3 rounded-lg transition-colors ${activeStep === 1 ? 'bg-military-green text-white glow-green' : 'hover:bg-military-green/10 text-gray-500'}`}>
-            <ShieldAlert size={24} />
-          </button>
-          <button className={`p-3 rounded-lg transition-colors ${activeStep === 2 ? 'bg-military-green text-white glow-green' : 'hover:bg-military-green/10 text-gray-500'}`}>
-             <FileText size={24} />
-          </button>
-          <div className="flex-1" />
-          <button className="p-3 text-gray-500 hover:text-white"><Settings size={24} /></button>
-        </nav>
-
-        {/* Central Display Area */}
-        <div className="flex-1 flex flex-col gap-6 relative">
-          <AnimatePresence mode="wait">
-            {activeStep === 0 && !file ? (
-              <motion.div 
-                key="upload"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                {...getRootProps()}
-                className={`flex-1 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all ${isDragActive ? 'border-military-green bg-military-green/5' : 'border-military-green/30 military-panel hover:border-military-green'}`}
-              >
-                <input {...getInputProps()} />
-                <div className="w-24 h-24 bg-military-green/10 rounded-full flex items-center justify-center mb-4"><MapIcon className="text-military-green w-10 h-10" /></div>
-                <h2 className="text-xl font-bold tracking-widest uppercase mb-1">Upload Tactical Scan</h2>
-                <p className="text-[10px] text-gray-500 font-mono mb-6 uppercase tracking-widest">MAPS, SAT-IMGS, GEOTIFF, PDF</p>
-                
-                <div className="bg-military-green text-white px-8 py-3 rounded-xl font-black text-xs tracking-widest shadow-lg hover:scale-105 transition-transform">
-                  CHOOSE TACTICAL FILE
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="viewer"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="flex-1 flex flex-col overflow-hidden relative military-panel rounded-2xl"
-              >
-                <div className="h-8 border-b border-military-green/20 bg-military-green/5 flex items-center px-4 justify-between">
-                   <div className="text-[9px] font-black tracking-widest text-military-green uppercase flex items-center gap-2">
-                     <Monitor size={10} /> Live Feed Output
-                   </div>
-                   <div className="flex gap-2">
-                      <div className="w-1.5 h-1.5 bg-military-green rounded-full animate-pulse" />
-                      <div className="w-1.5 h-1.5 bg-military-green rounded-full opacity-30" />
-                      <div className="w-1.5 h-1.5 bg-military-green rounded-full opacity-30" />
-                   </div>
-                </div>
-
-                <div className="flex-1 relative overflow-hidden flex bg-black">
-                  {/* Left: Original Preview Split */}
-                  <div className="w-1/3 border-r border-military-green/20 relative overflow-auto bg-black/40 flex flex-col items-center">
-                     <div className="sticky top-0 w-full p-2 text-[8px] bg-black/60 z-10 font-black text-gray-400 uppercase border-b border-military-green/10">Input Stream (Raw)</div>
-                     {originalMapPreview ? (
-                       originalMapPreview.startsWith('data:application/pdf') ? (
-                        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-military-green/40 mt-20">
-                          <FileText size={64} />
-                          <span className="text-[10px] font-black uppercase tracking-tighter">Encrypted PDF Map Stream</span>
-                          <span className="text-[8px] opacity-60 px-4 text-center">{file?.name}</span>
-                        </div>
-                       ) : (
-                        <img src={originalMapPreview} className="w-full opacity-40 grayscale" alt="original" />
-                       )
-                     ) : (
-                       <div className="flex-1 flex items-center justify-center text-[10px] text-gray-700 italic">No input data...</div>
+      {/* 1. MAP CANVAS (Main View - 100%) */}
+      <div className="absolute inset-0 bg-black overflow-hidden digital-grid">
+        <TransformWrapper ref={transformRef} centerOnInit minScale={0.1} maxScale={10} initialScale={1}>
+          <TransformComponent wrapperStyle={{ width: '100vw', height: '100vh' }}>
+            <div className="relative cursor-crosshair flex items-center justify-center min-w-screen min-h-screen" ref={mapRef}>
+               {isProcessing && <div className="scanning-lattice" />}
+               
+               {/* Base Map Frame */}
+               <div className="relative">
+                 {processedMap ? (
+                   <div className="relative">
+                     <img src={processedMap} className="block max-w-[90vw] max-h-[85vh] object-contain" alt="map" />
+                     {continuationLayer && showInference && (
+                       <img 
+                         src={`data:image/png;base64,${continuationLayer}`} 
+                         className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-80 mix-blend-screen" 
+                         alt="inference"
+                       />
                      )}
-                  </div>
-
-                  {/* Right: Processed Viewer with Zoom */}
-                  <div className="flex-1 relative bg-[#0a0c0b] group flex flex-col items-center justify-center overflow-hidden">
-                    <TransformWrapper ref={transformRef} limitToBounds={false} minScale={0.1} maxScale={8} centerOnInit>
-                      <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
-                        <div className="relative flex items-center justify-center cursor-crosshair min-w-full min-h-full" ref={mapRef}>
-                           {isProcessing && <div className="radar-v-bar" />}
-                           {processedMap ? (
-                             <div className="relative">
-                               <img 
-                                  src={processedMap} 
-                                  className={`block max-w-full h-auto transition-opacity duration-500 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
-                                  alt="processed-output"
-                               />
-                               {continuationLayer && showInference && (
-                                <img 
-                                  src={`data:image/png;base64,${continuationLayer}`}
-                                  className="absolute inset-0 w-full h-full pointer-events-none opacity-80 mix-blend-screen"
-                                  alt="continuation-overlay"
-                                />
-                               )}
-                             </div>
-                           ) : originalMapPreview ? (
-                             originalMapPreview.startsWith('data:application/pdf') ? (
-                              <div className="flex flex-col items-center gap-4 text-military-green/20">
-                                <ShieldAlert size={80} />
-                                <span className="text-xs font-black tracking-[0.5em] uppercase">Ready for decryption...</span>
-                              </div>
-                             ) : (
-                              <img 
-                                 src={originalMapPreview} 
-                                 className={`block max-w-full h-auto transition-opacity duration-500 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
-                                 alt="original-feed"
-                              />
-                             )
-                           ) : (
-                             <div className="text-military-green opacity-20"><Loader2 className="animate-spin" /></div>
-                           )}
-                           
-                           {/* Markers / Anomalies */}
-                           {!isProcessing && markers.map(m => (
-                            <div 
-                              key={m.id} 
-                              style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                              className="absolute -ml-[3px] -mt-[3px] z-[60]"
-                            >
-                               <div className={m.status === 'WARN' ? 'pulsate-pixel-warn' : 'pulsate-pixel'} />
-                               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[8px] p-2 border border-military-green/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-[70] shadow-2xl rounded">
-                                 <div className="font-black text-military-red mb-1">{m.type}</div>
-                                 {m.message}
-                               </div>
-                            </div>
-                           ))}
+                   </div>
+                 ) : originalMapPreview ? (
+                   <div className="relative">
+                     <img src={originalMapPreview} className={`block max-w-[90vw] max-h-[85vh] object-contain transition-opacity ${isProcessing ? 'opacity-30 blur-sm' : 'opacity-100'}`} alt="preview" />
+                     {isProcessing && (
+                        <div className="absolute top-10 left-10 laser-text text-[10px] bg-black/40 p-2 animate-pulse">
+                          {flickerCode}
                         </div>
-                      </TransformComponent>
-                    </TransformWrapper>
-                    
-                    {isProcessing && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-50">
-                        <Loader2 className="w-12 h-12 text-military-red animate-spin mb-4" />
-                        <div className="text-xl font-black text-military-red tracking-[0.5em] mb-2 uppercase italic">Cognitive Decryption...</div>
-                        <div className="text-[10px] font-mono text-military-green uppercase">{flickeringCoords}</div>
+                     )}
+                   </div>
+                 ) : (
+                    <motion.div 
+                      key="upload" {...getRootProps()}
+                      className={`w-[600px] h-[400px] border-2 border-dashed glass-module flex flex-col items-center justify-center cursor-pointer hover:border-laser-green ${isDragActive ? 'border-laser-green bg-laser-green/5' : 'border-tactical-primary/40'}`}
+                    >
+                      <input {...getInputProps()} />
+                      <div className="w-20 h-20 bg-tactical-primary/10 rounded-full flex items-center justify-center mb-6 laser-text">
+                        <MapIcon className="w-10 h-10" />
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/90 border border-military-green/50 p-2 rounded-full z-40 backdrop-blur-xl">
-                   <button onClick={() => transformRef.current.zoomIn()} className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><ZoomIn size={18}/></button>
-                   <button onClick={() => transformRef.current.zoomOut()} className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><ZoomOut size={18}/></button>
-                   <button onClick={() => transformRef.current.resetTransform()} className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><RotateCcw size={18}/></button>
-                   <div className="w-px h-6 bg-military-green/30 mx-1" />
-                   <button onClick={() => setShowInference(!showInference)}
-                      className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2 transition-all ${showInference ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.5)]' : 'text-amber-500 hover:bg-amber-500/10'}`}
-                    >
-                     <Layers size={12} /> AI Layer
-                   </button>
-                   <button onClick={() => setShowInspector(!showInspector)}
-                      className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2 transition-all ${showInspector ? 'bg-military-green text-white shadow-lg' : 'text-military-green hover:bg-military-green/10'}`}
-                    >
-                     <Eye size={12} /> Scan Panel
-                   </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Right Sidebar */}
-        <aside className="w-80 flex flex-col gap-6">
-          <div className="military-panel p-5 rounded-2xl flex flex-col gap-4">
-             <div className="flex justify-between items-center border-b border-military-green/20 pb-3">
-                <span className="text-[10px] font-black text-military-green uppercase tracking-widest flex items-center gap-2"><ShieldAlert size={12} /> SOP ENGINE 5.0 (AI-PLUS)</span>
-                {isProcessing && <Loader2 size={12} className="text-military-red animate-spin" />}
-             </div>
-             
-             {file && !processedMap && !isProcessing && (
-               <button onClick={async () => {
-                 setIsProcessing(true);
-                 const fd = new FormData(); fd.append("file", file);
-                 try {
-                   const res = await axios.post('/api/audit', fd);
-                   setProcessedMap(`data:image/jpeg;base64,${res.data.image}`);
-                   setContinuationLayer(res.data.layer);
-                   setErrors(res.data.errors);
-                   setMarkers(res.data.errors);
-                 } catch(e) {
-                   console.error("ANALYSIS FAILED:", e);
-                   const errorMsg = e.response?.data?.error || e.message || "Unknown tactical failure";
-                   alert(`TACTICAL SCAN ERROR: ${errorMsg}`);
-                   setErrors([{ id: 'err', type: 'SYS-ERR', message: "Hardware/API malfunction. Check network.", x: 50, y: 50, coords: "N/A" }]);
-                 } finally { setIsProcessing(false); }
-               }} 
-               className="w-full bg-military-red hover:bg-red-800 text-white py-3 rounded-lg font-black text-xs tracking-widest shadow-lg active:scale-95 transition-all">
-                 RUN COGNITIVE ANALYSIS
-               </button>
-             )}
-
-             <div className="space-y-2 mt-2">
-                <SOPItem id="SOP-01" label="Interval Inpainting" active={activeSOP === 'SOP-01'} />
-                <SOPItem id="SOP-02" label="Contextual Integrity" active={activeSOP === 'SOP-01'} />
-                <SOPItem id="SOP-03" label="Geometric Aligner" />
-             </div>
-
-             {errors.length > 0 && (
-               <div className="border-t border-military-red/20 pt-4 mt-2">
-                 <div className="text-[9px] font-black text-military-red uppercase mb-3 tracking-tighter">Violations Detected ({errors.length})</div>
-                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                   {errors.map(err => (
-                     <div 
-                      key={err.id} 
-                      onClick={() => {
-                        const zl = 6;
-                        const vW = mapRef.current.clientWidth;
-                        const vH = mapRef.current.clientHeight;
-                        transformRef.current.setTransform((vW/2) - (err.x/100*vW*zl), (vH/2) - (err.y/100*vH*zl), zl, 1000, "easeInOutQuad");
-                      }}
-                      className={`p-2 border rounded text-[9px] cursor-pointer group transition-all ${err.status === 'WARN' ? 'bg-amber-500/5 border-amber-500/30 hover:bg-amber-500/10' : 'bg-military-red/5 border-military-red/30 hover:bg-military-red/10'}`}
-                     >
-                       <div className="flex justify-between font-bold mb-1">
-                         <span className={err.status === 'WARN' ? 'text-amber-500' : 'text-military-red'}>{err.type}</span> 
-                         <span className="opacity-40">{err.status}</span>
-                       </div>
-                       <p className="opacity-80 group-hover:opacity-100 italic">{err.message}</p>
-                     </div>
-                   ))}
-                 </div>
+                      <h2 className="text-xl font-black uppercase tracking-widest mb-2 leading-none">Initialize Tactical Feed</h2>
+                      <p className="text-[9px] font-mono opacity-60 uppercase mb-8">Drop mapping files, PDF, or GEOTIFF here.</p>
+                      <button className="bg-tactical-primary text-white px-10 py-4 rounded font-black text-xs tracking-[0.5em] hover:bg-green-900 transition-all">UPLOAD_SCAN_FILE</button>
+                    </motion.div>
+                 )}
                </div>
-             )}
+
+               {/* Error Pulse Markers */}
+               {!isProcessing && markers.map(m => (
+                 <div 
+                   key={m.id} 
+                   style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                   className={`absolute -ml-5 -mt-5 w-10 h-10 flex items-center justify-center error-wireframe border-2 rounded`}
+                 >
+                    <div className={`w-2 h-2 rounded-full ${m.status === 'WARN' ? 'bg-amber-500' : 'bg-red-500'} pulse`} />
+                    <div className="absolute top-12 left-1/2 -translate-x-1/2 glass-module p-2 text-[8px] font-mono pointer-events-none opacity-0 group-hover:opacity-100 whitespace-nowrap">
+                       [{m.type}] {m.message}
+                    </div>
+                 </div>
+               ))}
+            </div>
+          </TransformComponent>
+        </TransformWrapper>
+      </div>
+
+      {/* 2. TOP HUD (Floating) */}
+      <div className="absolute top-8 inset-x-8 flex justify-between pointer-events-none">
+        <GlassModule className="px-6 py-4 flex items-center gap-6 pointer-events-auto">
+          <div className="relative">
+             <img src="/logo.png" className="w-12 h-12 object-contain mix-blend-screen opacity-90" alt="logo" />
+             <div className="absolute inset-0 border border-laser-green rounded-full animate-ping opacity-20" />
           </div>
-          
-          {processedMap && (
-             <button onClick={() => alert("Generating Secure PDF...")} className="bg-military-green/10 border border-military-green/50 text-military-green text-xs font-black py-4 rounded-xl flex items-center justify-center gap-3 hover:bg-military-green/20 transition-all">
-                <Download size={16} /> DOWNLOAD AUDIT
-             </button>
+          <div className="flex flex-col border-l border-tactical-primary/30 pl-6">
+            <h1 className="text-xl font-black uppercase tracking-tight italic">Operation <span className="laser-text">Map-Scan</span> <span className="text-[10px] opacity-40 ml-2">V2.0.4</span></h1>
+             <div className="flex gap-4 text-[9px] font-mono tracking-widest opacity-60 items-center mt-1 uppercase">
+                <span className="flex items-center gap-2"><div className="w-1 h-1 bg-laser-green rounded-full pulse" /> Active Terminal: {AUTH_ID}</span>
+                <span className="w-px h-2 bg-tactical-primary/40" />
+                <span>Sector: 33.72° N, 73.09° E</span>
+             </div>
+          </div>
+        </GlassModule>
+
+        <div className="flex items-center gap-4 pointer-events-auto">
+          {file && (
+            <GlassModule className="px-5 py-3 text-[10px] font-black uppercase flex items-center gap-3 laser-text cursor-pointer hover:bg-laser-green/10" onClick={resetMap}>
+              <RotateCcw size={14} /> Clear Buffer
+            </GlassModule>
           )}
-        </aside>
-      </main>
+          <GlassModule className="px-6 py-2 flex flex-col items-end">
+            <div className="text-[10px] font-black text-rose-500 tracking-widest">RESTRICTED_PROTOCOL</div>
+            <div className="text-[12px] font-mono laser-text mt-0.5">{timestamp}_GMT</div>
+          </GlassModule>
+          <button onClick={() => setIsLoggedIn(false)} className="glass-module p-4 text-rose-500 hover:bg-rose-500/20"><Power size={20} /></button>
+        </div>
+      </div>
+
+      {/* 3. UNIFIED UTILITY BAR (Left) */}
+      <div className="absolute left-8 top-44 bottom-8 w-20 pointer-events-none">
+        <GlassModule className="h-full flex flex-col items-center py-8 gap-10 overflow-y-auto w-full pointer-events-auto">
+           <ToolbarIcon icon={<Activity size={24}/>} active />
+           <ToolbarIcon icon={<Eye size={24}/>} />
+           <ToolbarIcon icon={<TerminalIcon size={24}/>} />
+           <ToolbarIcon icon={<Layers size={24}/>} />
+           <div className="flex-1" />
+           <ToolbarIcon icon={<Settings size={24}/>} />
+        </GlassModule>
+      </div>
+
+      {/* 4. SOP ACCORDION PANEL (Right) */}
+      <div className={`absolute right-8 top-44 bottom-8 transition-all duration-500 ${isRightPanelCollapsed ? 'w-12' : 'w-80'} pointer-events-none`}>
+        <GlassModule className="h-full pointer-events-auto flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-tactical-primary/20 flex justify-between items-center bg-tactical-primary/5">
+             {!isRightPanelCollapsed && <span className="text-[10px] font-black tracking-[0.2em] laser-text italic uppercase flex items-center gap-2"><ShieldAlert size={12}/> Control_Protocols</span>}
+             <button onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)} className="p-1 hover:text-laser-green transition-colors">
+                <ChevronRight size={18} className={`transition-transform duration-500 ${isRightPanelCollapsed ? 'rotate-180' : ''}`} />
+             </button>
+          </div>
+
+          {!isRightPanelCollapsed && (
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+               {file && !processedMap && (
+                 <button onClick={runAnalysis} className="w-full bg-rose-700/80 hover:bg-rose-600 text-white font-black py-4 mb-4 text-[10px] tracking-[0.3em] uppercase rounded shadow-[0_0_20px_rgba(230,57,70,0.3)] transition-all">
+                    START_COGNITIVE_SCAN
+                 </button>
+               )}
+
+               <SOPAccordionItem 
+                 id="SOP-01" label="Interval Inpainting" 
+                 status="OPTIMAL" errors={errors.filter(e => e.type.includes('INTERVAL') || e.status === 'WARN').length} 
+                 isOpen={activeAccordion === 'SOP-01'} onToggle={() => setActiveAccordion('SOP-01')}
+               />
+               <SOPAccordionItem 
+                 id="SOP-02" label="Contextual Integrity" 
+                 status="INFERENCE_ACTIVE" errors={errors.filter(e => e.type.includes('INTEGRITY')).length}
+                 isOpen={activeAccordion === 'SOP-02'} onToggle={() => setActiveAccordion('SOP-02')}
+               />
+               <SOPAccordionItem id="SOP-03" label="Geometric Alignment" status="STANDBY" isOpen={activeAccordion === 'SOP-03'} onToggle={() => setActiveAccordion('SOP-03')} />
+               
+               {errors.length > 0 && (
+                 <div className="mt-4 border-t border-tactical-primary/20 pt-4 flex flex-col gap-2">
+                    <div className="text-[9px] font-black laser-text mb-2 uppercase italic tracking-widest flex justify-between">Detected_Anomalies ({errors.length}) <Info size={10}/></div>
+                    {errors.map(err => (
+                       <div key={err.id} onClick={() => {
+                          const zl = 4;
+                          const vW = mapRef.current.clientWidth;
+                          const vH = mapRef.current.clientHeight;
+                          transformRef.current.setTransform((vW/2) - (err.x/100*vW*zl), (vH/2) - (err.y/100*vH*zl), zl, 800);
+                       }} className={`p-2 border rounded text-[9px] font-mono cursor-pointer transition-all ${err.status === 'WARN' ? 'border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10' : 'border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10'}`}>
+                          <div className="flex justify-between items-center mb-1">
+                             <span className={err.status === 'WARN' ? 'text-amber-500' : 'text-rose-500'}>[{err.type}]</span>
+                             <span className="opacity-40">{err.status}</span>
+                          </div>
+                          <p className="opacity-80 italic">{err.message}</p>
+                       </div>
+                    ))}
+                 </div>
+               )}
+            </div>
+          )}
+
+          {file && processedMap && !isRightPanelCollapsed && (
+             <div className="p-4 border-t border-tactical-primary/20">
+                <button onClick={() => alert("Decrypting Report...")} className="w-full bg-tactical-primary/20 border border-tactical-primary/50 text-[10px] font-black uppercase laser-text py-4 rounded hover:bg-tactical-primary/30 transition-all flex items-center justify-center gap-3">
+                   <Download size={14}/> Download_Audit_Bin
+                </button>
+             </div>
+          )}
+        </GlassModule>
+      </div>
+
+      {/* Inspector Toggle (Floating Bottom) */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-[9px] font-black laser-text uppercase flex items-center gap-4 bg-black/60 p-2 px-8 rounded-full border border-tactical-primary/30 backdrop-blur-xl">
+         <span className="opacity-40">Zoom_Lvl: {transformRef.current?.instance.transformState.scale.toFixed(2)}x</span>
+         <span className="w-px h-3 bg-tactical-primary/30" />
+         <button onClick={() => setShowInference(!showInference)} className={`transition-all ${showInference ? 'laser-text' : 'opacity-20'}`}>
+            Continuation_Layer::{showInference ? 'ON' : 'OFF'}
+         </button>
+      </div>
     </div>
   );
 }
 
-const SOPItem = ({ id, label, active }) => (
-  <div className={`flex items-center justify-between p-3 rounded border transition-all ${active ? 'border-military-green bg-military-green/10' : 'border-gray-500/10 bg-black/10'}`}>
-     <div className="flex flex-col">
-       <span className="text-[8px] font-black opacity-40">{id}</span>
-       <span className="text-[10px] font-bold">{label}</span>
-     </div>
-     <ChevronRight size={14} className={active ? 'text-military-green' : 'opacity-20'} />
+const GlassModule = ({ children, className = "", onClick }) => (
+  <div onClick={onClick} className={`glass-module ${className}`}>
+    {children}
   </div>
 );
 
-const LoginScreen = ({ setAuth, theme }) => {
+const ToolbarIcon = ({ icon, active }) => (
+  <button className={`p-4 rounded-xl transition-all ${active ? 'bg-laser-green/10 text-laser-green shadow-[0_0_20px_rgba(57,255,20,0.2)]' : 'text-tactical-primary opacity-60 hover:opacity-100 hover:text-laser-green'}`}>
+    {icon}
+  </button>
+);
+
+const SOPAccordionItem = ({ id, label, status, errors = 0, isOpen, onToggle }) => (
+  <div className={`border rounded-lg transition-all ${isOpen ? 'border-laser-green/40 bg-laser-green/5' : 'border-tactical-primary/20 hover:border-tactical-primary/50'}`}>
+    <div onClick={onToggle} className="p-3 flex justify-between items-center cursor-pointer">
+      <div className="flex flex-col">
+        <span className="text-[7px] font-mono opacity-40 uppercase">{id}</span>
+        <span className="text-[10px] font-black uppercase tracking-tight">{label}</span>
+      </div>
+      <div className="flex items-center gap-2">
+         {errors > 0 && <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 rounded">{errors}</span>}
+         <ChevronRight size={14} className={`transition-transform ${isOpen ? 'rotate-90 text-laser-green' : 'opacity-20'}`} />
+      </div>
+    </div>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+          <div className="p-3 pt-0 border-t border-tactical-primary/10 text-[9px] font-mono leading-relaxed space-y-2 pt-3">
+             <div className="flex justify-between"><span>STATUS:</span> <span className="laser-text">{status}</span></div>
+             <div className="flex justify-between"><span>DECRYPTION:</span> <span className="opacity-60">ACTIVE_HYBRID</span></div>
+             <div className="flex justify-between"><span>ISO_COMPLIANCE:</span> <span className="opacity-60 text-emerald-400">MIL-STD-1913</span></div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+);
+
+const LoginScreen = ({ setAuth }) => {
   const [id, setId] = useState('');
   const [pass, setPass] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
   const handleLogin = (e) => {
     e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      if (id === AUTH_ID && pass === AUTH_PASS) {
-        setAuth(true);
-      } else {
-        setError('ACCESS DENIED: INVALID CREDENTIALS');
-      }
-      setLoading(false);
-    }, 1500);
+    if (id === AUTH_ID && pass === AUTH_PASS) setAuth(true);
+    else alert("AUTH_FAIL: INVALID_SERVICE_ID");
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative bg-black">
-      <div className="scanline-overlay" />
-      <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #006600 0%, transparent 70%)' }} />
-      
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md military-panel p-10 rounded-3xl z-10 border-t-4 border-t-military-green"
-      >
-        <div className="flex flex-col items-center mb-10">
-          <img src="/logo.png" className="w-24 h-24 object-contain mb-6 mix-blend-screen" alt="Logo" />
-          <h1 className="text-2xl font-black tracking-widest text-white uppercase italic">HQ_COMMAND_OS</h1>
-          <div className="h-px w-20 bg-military-green mt-2" />
-        </div>
-
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-military-green opacity-40" size={18} />
+    <div className="fixed inset-0 flex items-center justify-center digital-grid">
+      <div className="scanline-hud" />
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="w-[450px] glass-module p-12 flex flex-col items-center">
+         <img src="/logo.png" className="w-24 h-24 mb-10 mix-blend-screen" alt="logo" />
+         <h1 className="text-xl font-black italic tracking-widest mb-8 laser-text">TACTICAL_ACCESS_POINT</h1>
+         <form onSubmit={handleLogin} className="w-full space-y-6">
             <input 
-              type="text" placeholder="SERVICE ID" value={id} onChange={e => setId(e.target.value)}
-              className="w-full bg-black/40 border border-military-green/30 rounded-xl py-4 pl-12 pr-4 text-xs font-mono tracking-widest focus:border-military-green focus:outline-none focus:ring-1 focus:ring-military-green transition-all"
-              required
+              type="text" placeholder="SERVICE_ID" value={id} onChange={e => setId(e.target.value)}
+              className="w-full bg-black/40 border-b border-tactical-primary/40 p-4 font-mono text-xs focus:outline-none focus:border-laser-green laser-text" 
             />
-          </div>
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-military-green opacity-40" size={18} />
             <input 
-              type="password" placeholder="SECURE KEY" value={pass} onChange={e => setPass(e.target.value)}
-              className="w-full bg-black/40 border border-military-green/30 rounded-xl py-4 pl-12 pr-4 text-xs font-mono tracking-widest focus:border-military-green focus:outline-none focus:ring-1 focus:ring-military-green transition-all"
-              required
+              type="password" placeholder="SECURE_KEY" value={pass} onChange={e => setPass(e.target.value)}
+              className="w-full bg-black/40 border-b border-tactical-primary/40 p-4 font-mono text-xs focus:outline-none focus:border-laser-green laser-text" 
             />
-          </div>
-
-          <button 
-            type="submit" disabled={loading}
-            className="w-full bg-military-green text-white py-4 rounded-xl font-black tracking-[0.3em] uppercase hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="animate-spin" size={18} /> : 'INITIALIZE ACCESS'}
-          </button>
-        </form>
-
-        {error && <div className="mt-6 text-[10px] text-military-red font-black text-center animate-pulse">{error}</div>}
-        
-        <div className="mt-10 text-[8px] text-gray-500 font-bold text-center tracking-[0.2em] leading-relaxed uppercase">
-          WARNING: Unauthorized access to this terminal is 15 USC § 1030 violation. ALL TRAFFIC IS LOGGED.
-        </div>
+            <button className="w-full bg-tactical-primary/30 border border-tactical-primary text-white font-black py-5 tracking-[0.4em] hover:bg-tactical-primary/60 transition-all uppercase text-xs">Authorize</button>
+         </form>
+         <div className="mt-12 text-[7px] text-center opacity-30 tracking-[0.2em] font-mono leading-relaxed">
+            RESTRICTED ACCESS ONLY. ATTEMPTED BREACH WILL TRIGGER COUNTER-ELINT PROTOCOLS.
+         </div>
       </motion.div>
     </div>
   );

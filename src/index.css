@@ -1,182 +1,121 @@
 @import "tailwindcss";
 
 @theme {
-  --color-military-green: #006600;
+  --color-tactical-primary: #4B5320;
+  --color-laser-green: #39FF14;
+  --color-near-black: #0D0D0D;
   --color-military-red: #E63946;
-  --color-military-yellow: #FFB703;
 }
 
 :root {
-  --tactical-bg: #050706;
-  --panel-bg: rgba(18, 21, 19, 0.7);
-  --border-color: rgba(0, 102, 0, 0.4);
-  --military-green-glow: rgba(0, 255, 65, 0.15);
-  --military-red-glow: rgba(230, 57, 70, 0.4);
-  --amber-glow: rgba(245, 158, 11, 0.4);
-  --text-main: #e2e8f0;
-  --text-dim: #94a3b8;
-  --scanline-opacity: 0.2;
-}
-
-[data-theme='recon'] {
-  --tactical-bg: #f8fafc;
-  --panel-bg: rgba(241, 245, 249, 0.8);
-  --border-color: rgba(0, 102, 0, 0.2);
-  --text-main: #0f172a;
-  --text-dim: #475569;
-  --scanline-opacity: 0.05;
+  --glass-bg: rgba(13, 13, 13, 0.7);
+  --glass-border: rgba(75, 83, 32, 0.4);
+  --accent-glow: rgba(57, 255, 20, 0.3);
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Inter', sans-serif;
 }
 
 body {
-  background-color: var(--tactical-bg);
-  color: var(--text-main);
+  background-color: var(--color-near-black);
+  color: #f8fafc;
   margin: 0;
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
-  overflow-x: hidden;
-  transition: background-color 0.5s ease, color 0.5s ease;
+  font-family: var(--font-sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* CRT Scanline Effect */
-.scanline-overlay {
+/* --- GLASSMORPHISM CORE --- */
+.glass-module {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(57, 255, 20, 0.05);
+  border-radius: 12px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-module:hover {
+  border-color: rgba(57, 255, 20, 0.4);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(57, 255, 20, 0.1);
+}
+
+/* --- TACTICAL ANIMATIONS --- */
+@keyframes laser-pulse {
+  0% { opacity: 0.4; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0.4; transform: scale(0.95); }
+}
+
+.laser-text {
+  color: var(--color-laser-green);
+  text-shadow: 0 0 10px var(--accent-glow), 0 0 20px rgba(57, 255, 20, 0.2);
+  font-family: var(--font-mono);
+}
+
+@keyframes grid-drift {
+  from { background-position: 0 0; }
+  to { background-position: 40px 40px; }
+}
+
+.digital-grid {
+  background-image: linear-gradient(rgba(57, 255, 20, 0.05) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(57, 255, 20, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: grid-drift 10s linear infinite;
+}
+
+/* --- SCANNING LATTICE --- */
+.scanning-lattice {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--color-laser-green) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+/* --- ERROR WIREFRAME --- */
+@keyframes wireframe-pulse {
+  0% { border-color: rgba(230, 57, 70, 0.5); box-shadow: 0 0 5px rgba(230, 57, 70, 0.2); }
+  50% { border-color: rgba(230, 57, 70, 1); box-shadow: 0 0 20px rgba(230, 57, 70, 0.6); }
+  100% { border-color: rgba(230, 57, 70, 0.5); box-shadow: 0 0 5px rgba(230, 57, 70, 0.2); }
+}
+
+.error-wireframe {
+  border: 2px solid var(--color-military-red);
+  animation: wireframe-pulse 1s infinite;
+  transition: all 0.3s ease;
+}
+
+.error-wireframe:hover {
+  transform: scale(1.2);
+  z-index: 100;
+}
+
+/* --- CRT SCANLINES ENHANCED --- */
+.scanline-hud {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    rgba(18, 16, 16, 0) 50%,
-    rgba(0, 0, 0, 0.1) 50%
-  ), linear-gradient(
-    90deg,
-    rgba(0, 102, 0, 0.02),
-    rgba(0, 102, 0, 0.01),
-    rgba(0, 102, 0, 0.02)
-  );
-  background-size: 100% 2px, 3px 100%;
+  inset: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), 
+              linear-gradient(90deg, rgba(57, 255, 20, 0.02), rgba(0, 0, 0, 0), rgba(57, 255, 20, 0.02));
+  background-size: 100% 4px, 100% 100%;
   pointer-events: none;
   z-index: 1000;
-  opacity: var(--scanline-opacity);
 }
 
-.military-panel {
-  background: var(--panel-bg);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 0 25px rgba(0,0,0,0.5), inset 0 0 15px var(--military-green-glow);
-  transition: box-shadow 0.3s ease;
-}
-
-.military-panel:hover {
-  box-shadow: 0 0 35px rgba(0,0,0,0.6), inset 0 0 20px var(--military-green-glow);
-}
-
-.glow-red {
-  box-shadow: 0 0 20px var(--military-red-glow);
-}
-
-.glow-green {
-  box-shadow: 0 0 15px var(--color-military-green);
-}
-
-/* Radar Scan Animation */
-@keyframes radar-scan {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100%); }
-}
-
-.radar-v-bar {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: var(--color-military-green);
-  box-shadow: 0 0 20px var(--military-green-glow), 0 0 40px var(--military-green-glow);
-  animation: radar-scan 4s linear infinite;
-  z-index: 50;
-  opacity: 0.8;
-}
-
-/* Restricted Glitch Effect */
-@keyframes glitch {
-  0% { transform: translate(0); text-shadow: none; }
-  20% { transform: translate(-1px, 1px); }
-  40% { transform: translate(-1px, -1px); }
-  60% { transform: translate(1px, 1px); }
-  80% { transform: translate(1px, -1px); }
-  100% { transform: translate(0); text-shadow: none; }
-}
-
-.restricted-glitch {
-  animation: glitch 5s infinite;
-}
-
-.military-panel {
-  background: var(--panel-bg);
-  border: 1px solid var(--border-color);
-  backdrop-blur: 10px;
-}
-
-/* Focused Dot Marker - Optimized for visibility */
-@keyframes pulse-dot-red {
-  0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.9); }
-  70% { transform: scale(1.3); box-shadow: 0 0 0 20px rgba(230, 57, 70, 0); }
-  100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(230, 57, 70, 0); }
-}
-
-@keyframes pulse-dot-green {
-  0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(0, 102, 0, 0.9); }
-  70% { transform: scale(1.3); box-shadow: 0 0 0 20px rgba(0, 102, 0, 0); }
-  100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(0, 102, 0, 0); }
-}
-
-.pulsate-pixel {
-  width: 14px;
-  height: 14px;
-  background: var(--color-military-red);
-  border-radius: 50%;
-  animation: pulse-dot-red 1.5s infinite;
-  border: 2px solid white;
-  box-shadow: 0 0 15px var(--color-military-red);
-  z-index: 100;
-}
-
-.pulsate-pixel-warn {
-  width: 14px;
-  height: 14px;
-  background: #f59e0b;
-  border-radius: 50%;
-  animation: pulse-dot-amber 1.8s infinite;
-  border: 2px solid white;
-  box-shadow: 0 0 15px #f59e0b;
-  z-index: 100;
-}
-
-.glow-green {
-  box-shadow: 0 0 15px var(--color-military-green-glow);
-  text-shadow: 0 0 8px var(--color-military-green-glow);
-}
-
-.glow-amber {
-  box-shadow: 0 0 20px var(--color-amber-glow);
-  text-shadow: 0 0 10px var(--color-amber-glow);
-}
-
-.scanline-overlay {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-  background-size: 100% 3px, 3px 100%;
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0.15;
+.hud-glitch {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-laser-green);
+  opacity: 0.7;
 }
 
 ::-webkit-scrollbar {
-  width: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
+  width: 2px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-military-green);
+  background: var(--color-laser-green);
   border-radius: 10px;
 }
