@@ -153,7 +153,7 @@ function App() {
         </div>
       </header>
 
-      {/* Main Tactical Interface - similar to previous but refined dot markers */}
+      {/* Main Tactical Interface */}
       <main className="flex-1 flex overflow-hidden p-6 gap-6 z-40 bg-transparent">
         
         {/* Left Toolbar */}
@@ -184,7 +184,11 @@ function App() {
                 <input {...getInputProps()} />
                 <div className="w-24 h-24 bg-military-green/10 rounded-full flex items-center justify-center mb-4"><MapIcon className="text-military-green w-10 h-10" /></div>
                 <h2 className="text-xl font-bold tracking-widest uppercase mb-1">Upload Tactical Scan</h2>
-                <p className="text-[10px] text-gray-500 font-mono">SUPPORTED: MAPS, SAT-IMGS, GEOTIFF</p>
+                <p className="text-[10px] text-gray-500 font-mono mb-6 uppercase tracking-widest">MAPS, SAT-IMGS, GEOTIFF, PDF</p>
+                
+                <div className="bg-military-green text-white px-8 py-3 rounded-xl font-black text-xs tracking-widest shadow-lg hover:scale-105 transition-transform">
+                  CHOOSE TACTICAL FILE
+                </div>
               </motion.div>
             ) : (
               <motion.div 
@@ -208,19 +212,23 @@ function App() {
                   <div className="w-1/3 border-r border-military-green/20 relative overflow-auto bg-black/40 flex flex-col items-center">
                      <div className="sticky top-0 w-full p-2 text-[8px] bg-black/60 z-10 font-black text-gray-400 uppercase border-b border-military-green/10">Input Stream (Raw)</div>
                      {originalMapPreview ? (
-                       <img src={originalMapPreview} className="w-full opacity-40 grayscale" alt="original" />
+                       originalMapPreview.startsWith('data:application/pdf') ? (
+                        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-military-green/40 mt-20">
+                          <FileText size={64} />
+                          <span className="text-[10px] font-black uppercase tracking-tighter">Encrypted PDF Map Stream</span>
+                          <span className="text-[8px] opacity-60 px-4 text-center">{file?.name}</span>
+                        </div>
+                       ) : (
+                        <img src={originalMapPreview} className="w-full opacity-40 grayscale" alt="original" />
+                       )
                      ) : (
                        <div className="flex-1 flex items-center justify-center text-[10px] text-gray-700 italic">No input data...</div>
                      )}
-                  </div>                   {/* Right: Processed Viewer with Zoom */}
+                  </div>
+
+                  {/* Right: Processed Viewer with Zoom */}
                   <div className="flex-1 relative bg-[#0a0c0b] group flex flex-col items-center justify-center overflow-hidden">
-                    <TransformWrapper 
-                      ref={transformRef} 
-                      limitToBounds={false} 
-                      minScale={0.1} 
-                      maxScale={8}
-                      centerOnInit
-                    >
+                    <TransformWrapper ref={transformRef} limitToBounds={false} minScale={0.1} maxScale={8} centerOnInit>
                       <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
                         <div className="relative flex items-center justify-center cursor-crosshair min-w-full min-h-full" ref={mapRef}>
                            {isProcessing && <div className="radar-v-bar" />}
@@ -231,11 +239,18 @@ function App() {
                                 alt="processed-output"
                              />
                            ) : originalMapPreview ? (
-                             <img 
-                                src={originalMapPreview} 
-                                className={`block max-w-full h-auto transition-opacity duration-500 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
-                                alt="original-feed"
-                             />
+                             originalMapPreview.startsWith('data:application/pdf') ? (
+                              <div className="flex flex-col items-center gap-4 text-military-green/20">
+                                <ShieldAlert size={80} />
+                                <span className="text-xs font-black tracking-[0.5em] uppercase">Ready for decryption...</span>
+                              </div>
+                             ) : (
+                              <img 
+                                 src={originalMapPreview} 
+                                 className={`block max-w-full h-auto transition-opacity duration-500 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
+                                 alt="original-feed"
+                              />
+                             )
                            ) : (
                              <div className="text-military-green opacity-20"><Loader2 className="animate-spin" /></div>
                            )}
@@ -245,7 +260,7 @@ function App() {
                             <div 
                               key={m.id} 
                               style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                              className={`absolute -ml-[3px] -mt-[3px] z-[60]`}
+                              className="absolute -ml-[3px] -mt-[3px] z-[60]"
                             >
                                <div className={m.status === 'PASS' ? 'pulsate-pixel-pass' : 'pulsate-pixel'} />
                                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[8px] p-1 border border-military-green/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-[70]">
