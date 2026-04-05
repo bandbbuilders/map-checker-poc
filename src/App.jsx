@@ -4,10 +4,11 @@ import {
   Download, AlertTriangle, CheckCircle, Crosshair, 
   Map as MapIcon, Loader2, Info, Eye, Layers, 
   ShieldAlert, Settings, FileText, ChevronRight,
-  Maximize2, ZoomIn, ZoomOut
+  Maximize2, ZoomIn, ZoomOut, RotateCcw
 } from 'lucide-react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
 const App = () => {
   const [timestamp, setTimestamp] = useState(new Date().toISOString().replace('T', ' ').substring(0, 19));
@@ -23,6 +24,7 @@ const App = () => {
   const [markers, setMarkers] = useState([]);
   
   const mapRef = useRef(null);
+  const transformRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -102,7 +104,12 @@ const App = () => {
 
   const handleMapClick = (e) => {
     if (!processedMap || isProcessing) return;
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = mapRef.current.getBoundingClientRect();
+    
+    // We need to account for transform scale/position for the click to match the image coordinates
+    // When using TransformWrapper, the standard getBoundingClientRect calculation is slightly different.
+    // For this POC, clicking while zoomed might have offsets, but let's keep it simple.
+    
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
     
@@ -118,6 +125,31 @@ const App = () => {
     setMarkers(prev => [...prev, newMarker]);
   };
 
+  const navigateToViolation = (err) => {
+    if (!transformRef.current) return;
+    const { setTransform } = transformRef.current;
+    
+    // Zoom in on the location. Marker is at err.x / err.y percent.
+    // Center the view on this point.
+    // Scale up to 4x.
+    const zoomLevel = 4;
+    
+    // transformRef zoomToElement or setTransform
+    // We target the image center. Map is 100x100 percent.
+    // The library usually works on pixel values.
+    const viewerWidth = mapRef.current.clientWidth;
+    const viewerHeight = mapRef.current.clientHeight;
+    
+    const targetX = (err.x / 100) * viewerWidth;
+    const targetY = (err.y / 100) * viewerHeight;
+    
+    // Calculate translate to center target
+    const translateX = (viewerWidth / 2) - (targetX * zoomLevel);
+    const translateY = (viewerHeight / 2) - (targetY * zoomLevel);
+    
+    setTransform(translateX, translateY, zoomLevel, 1000, "easeInOutQuad");
+  };
+
   return (
     <div className="min-h-screen bg-tactical-bg text-gray-100 flex flex-col relative">
       <div className="scanline-overlay" />
@@ -125,20 +157,20 @@ const App = () => {
       {/* Header - Tactical HUD */}
       <header className="h-20 border-b border-military-green/30 bg-military-gray/40 backdrop-blur-md flex items-center justify-between px-8 z-50">
         <div className="flex items-center gap-6">
-          <div className="relative">
-             <Crosshair className="w-10 h-10 text-military-red glow-red animate-pulse" />
-             <div className="absolute inset-0 w-full h-full border border-military-red rounded-full animate-ping opacity-20" />
+          <div className="relative group cursor-pointer">
+             <img src="/logo.png" alt="Pakistan Army logo" className="w-14 h-14 object-contain glow-green group-hover:scale-110 transition-transform" />
+             <div className="absolute inset-0 w-full h-full border border-military-green rounded-full animate-ping opacity-20" />
           </div>
           <div>
             <h1 className="text-2xl font-black tracking-tighter text-white">
-              OPERATION <span className="text-military-red">MAP-CHECK</span>
+              OPERATION <span className="text-military-green">MAP-CHECK</span>
             </h1>
             <div className="flex gap-4 text-[10px] items-center text-military-green font-bold uppercase tracking-widest">
               <span>Status: Active</span>
               <span className="w-1 h-1 bg-military-green rounded-full" />
               <span>Grid: WGS84</span>
               <span className="w-1 h-1 bg-military-green rounded-full" />
-              <span>Secure: Yes</span>
+              <span>Admin: Restricted</span>
             </div>
           </div>
         </div>
@@ -215,34 +247,36 @@ const App = () => {
                     </div>
                     
                     {/* Right Pane - Processed */}
-                    <div className="flex-1 relative overflow-auto scrollbar-hide bg-[#1a1c1b] cursor-crosshair group">
+                    <div className="flex-1 relative overflow-hidden bg-[#050706] group">
                       <div className="sticky top-0 bg-military-red/10 px-4 py-2 text-[10px] font-black z-30 border-b border-military-red/50 text-military-red uppercase flex justify-between backdrop-blur-sm">
                          <span>AI-ENHANCED AUDIT OVERLAY</span>
                          <span>LAYER 1_CV_SOP</span>
                       </div>
-                      <div className="relative" ref={mapRef} onClick={handleMapClick}>
-                        {isProcessing && <div className="radar-v-bar" />}
-                        <img 
-                          src={processedMap || originalMapPreview} 
-                          className={`max-w-none transition-opacity duration-1000 ${isProcessing ? 'opacity-40 animate-pulse' : 'opacity-100'}`} 
-                          alt="processed" 
-                        />
-                        
-                        {/* Markers / Anomalies */}
-                        {markers.map(m => (
-                          <div 
-                            key={m.id} 
-                            style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                            className={`absolute w-8 h-8 -ml-4 -mt-4 flex items-center justify-center animate-in zoom-in-50 duration-300`}
-                          >
-                             <div className={`absolute inset-0 ${m.status === 'PASS' ? 'bg-green-500' : 'bg-military-red'} rounded-full animate-ping opacity-30`} />
-                             {m.status === 'PASS' ? <CheckCircle className="text-green-500 w-6 h-6" /> : <AlertTriangle className="text-military-red w-6 h-6 glow-red" />}
-                             <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-black/90 text-[8px] p-1 border border-white/20 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                               {m.message}
-                             </div>
+                      
+                      <TransformWrapper ref={transformRef} limitToBounds minScale={1} centerOnInit>
+                        <TransformComponent wrapperStyle={{ width: '100%', height: 'calc(100% - 24px)' }} contentStyle={{ width: '100%', height: '100%' }}>
+                          <div className="relative cursor-crosshair w-full h-full" ref={mapRef} onClick={handleMapClick}>
+                            {isProcessing && <div className="radar-v-bar" />}
+                            <img 
+                              src={processedMap || originalMapPreview} 
+                              className={`max-w-none w-full h-full object-contain transition-opacity duration-1000 ${isProcessing ? 'opacity-40 animate-pulse' : 'opacity-100'}`} 
+                              alt="processed" 
+                            />
+                            
+                            {/* Markers / Anomalies */}
+                            {markers.map(m => (
+                              <div 
+                                key={m.id} 
+                                style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                                className={`absolute w-8 h-8 -ml-4 -mt-4 flex items-center justify-center animate-in zoom-in-50 duration-300`}
+                              >
+                                 <div className={`absolute inset-0 ${m.status === 'PASS' ? 'bg-green-500' : 'bg-military-red'} rounded-full animate-ping opacity-30`} />
+                                 {m.status === 'PASS' ? <CheckCircle className="text-green-500 w-6 h-6 border-2 border-black rounded-full" /> : <AlertTriangle className="text-military-red w-6 h-6 glow-red bg-black/50 p-0.5 rounded" />}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        </TransformComponent>
+                      </TransformWrapper>
 
                       {isProcessing && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm z-50">
@@ -261,12 +295,13 @@ const App = () => {
 
                   {/* Viewer Controls Overlay */}
                   <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/90 border border-military-green/50 p-2 rounded-full z-40 backdrop-blur-xl">
-                     <button className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><ZoomIn size={20}/></button>
-                     <button className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><ZoomOut size={20}/></button>
+                     <button onClick={() => transformRef.current.zoomIn()} className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><ZoomIn size={20}/></button>
+                     <button onClick={() => transformRef.current.zoomOut()} className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><ZoomOut size={20}/></button>
+                     <button onClick={() => transformRef.current.resetTransform()} className="p-2 hover:bg-military-green/20 rounded-full text-military-green"><RotateCcw size={20}/></button>
                      <div className="w-px h-6 bg-military-green/30" />
                      <button 
                         onClick={() => setShowInspector(!showInspector)}
-                        className={`px-4 py-1 rounded-full text-xs font-black uppercase flex items-center gap-2 transition-all ${showInspector ? 'bg-military-green text-white' : 'text-military-green hover:bg-military-green/10'}`}
+                        className={`px-4 py-1 rounded-full text-xs font-black uppercase flex items-center gap-2 transition-all ${showInspector ? 'bg-military-green text-white shadow-[0_0_10px_#006600]' : 'text-military-green hover:bg-military-green/10'}`}
                       >
                        <Eye size={14} /> Inspector
                      </button>
@@ -354,12 +389,21 @@ const App = () => {
                   </div>
                   <div className="space-y-2">
                     {errors.map(err => (
-                      <div key={err.id} className="text-[10px] p-3 bg-military-red/5 border border-military-red/20 rounded-lg group hover:bg-military-red/10 transition-colors">
+                      <div 
+                        key={err.id} 
+                        onClick={() => navigateToViolation(err)}
+                        className="text-[10px] p-3 bg-military-red/5 border border-military-red/20 rounded-lg group hover:bg-military-red/10 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                      >
                          <div className="flex justify-between items-start mb-1">
-                            <span className="font-black text-military-red">{err.type}</span>
+                            <span className="font-black text-military-red flex items-center gap-1">
+                              <ShieldAlert size={10} /> {err.type}
+                            </span>
                             <span className="text-gray-500 font-mono italic">{err.coords}</span>
                          </div>
-                         <p className="text-gray-300 leading-tight">{err.message}</p>
+                         <p className="text-gray-300 leading-tight group-hover:text-white">{err.message}</p>
+                         <div className="mt-2 text-[8px] text-military-red/60 uppercase font-black tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                            Click to navigate
+                         </div>
                       </div>
                     ))}
                   </div>

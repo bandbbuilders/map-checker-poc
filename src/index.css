@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --color-military-green: #4B5320;
-  --color-military-gray: #2C3E50;
-  --color-military-red: #FF0000;
-  --color-military-yellow: #FFFF00;
-  --color-tactical-bg: #0D0F0E;
+  --color-military-green: #006600;
+  --color-military-gray: #121513;
+  --color-military-red: #E63946;
+  --color-military-yellow: #FFB703;
+  --color-tactical-bg: #050706;
 }
 
 :root {
