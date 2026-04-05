@@ -69,6 +69,17 @@ function App() {
     multiple: false
   });
 
+  const resetAudit = () => {
+    if (originalMapPreview) URL.revokeObjectURL(originalMapPreview);
+    setFile(null);
+    setOriginalMapPreview(null);
+    setProcessedMap(null);
+    setErrors([]);
+    setMarkers([]);
+    setActiveStep(0);
+    setIsProcessing(false);
+  };
+
   // UI Components
   if (!isLoggedIn) {
      return <LoginScreen setAuth={setIsLoggedIn} theme={theme} />;
@@ -102,6 +113,16 @@ function App() {
         </div>
 
         <div className="flex items-center gap-6">
+          {/* Next Map Button */}
+          {file && (
+            <button 
+              onClick={resetAudit}
+              className="flex items-center gap-2 px-4 py-2 bg-military-green/20 hover:bg-military-green/40 border border-military-green/50 text-military-green text-[10px] font-black uppercase rounded-lg transition-all"
+            >
+              <RotateCcw size={14} /> Next Map
+            </button>
+          )}
+
           {/* Theme Toggler */}
           <button 
             onClick={() => setTheme(theme === 'battle' ? 'recon' : 'battle')}
@@ -187,19 +208,29 @@ function App() {
                      ) : (
                        <div className="flex-1 flex items-center justify-center text-[10px] text-gray-700 italic">No input data...</div>
                      )}
-                  </div>
-
-                  {/* Right: Processed Viewer with Zoom */}
-                  <div className="flex-1 relative bg-black/20 group flex flex-col">
-                    <TransformWrapper ref={transformRef} limitToBounds={false} minScale={0.1} centerOnInit initialScale={1}>
-                      <TransformComponent wrapperStyle={{ width: '100%', height: '100%', flex: 1 }} contentStyle={{ width: '100%', height: '100%' }}>
-                        <div className="relative w-full h-full min-h-[500px] flex items-center justify-center cursor-crosshair" ref={mapRef}>
+                  </div>                   {/* Right: Processed Viewer with Zoom */}
+                  <div className="flex-1 relative bg-[#0a0c0b] group flex flex-col items-center justify-center overflow-hidden">
+                    <TransformWrapper 
+                      ref={transformRef} 
+                      limitToBounds={false} 
+                      minScale={0.1} 
+                      maxScale={8}
+                      centerOnInit
+                    >
+                      <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
+                        <div className="relative flex items-center justify-center cursor-crosshair min-w-full min-h-full" ref={mapRef}>
                            {isProcessing && <div className="radar-v-bar" />}
-                           {(processedMap || originalMapPreview) ? (
+                           {processedMap ? (
                              <img 
-                                src={processedMap || originalMapPreview} 
-                                className={`max-w-full max-h-full object-contain transition-opacity duration-1000 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
+                                src={processedMap} 
+                                className={`block max-w-full h-auto transition-opacity duration-500 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
                                 alt="processed-output"
+                             />
+                           ) : originalMapPreview ? (
+                             <img 
+                                src={originalMapPreview} 
+                                className={`block max-w-full h-auto transition-opacity duration-500 ${isProcessing ? 'opacity-30' : 'opacity-100'}`} 
+                                alt="original-feed"
                              />
                            ) : (
                              <div className="text-military-green opacity-20"><Loader2 className="animate-spin" /></div>
