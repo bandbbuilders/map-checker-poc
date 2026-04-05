@@ -81,37 +81,25 @@ function App() {
       const px = (m.x / 100) * canvas.width;
       const py = (m.y / 100) * canvas.height;
 
-      if (isZoomedOut) {
-        let clusterCount = 1;
-        markers.forEach((m2, idx2) => {
-          if (idx === idx2 || drawnMarkers.has(idx2)) return;
-          const dist = Math.sqrt(Math.pow((m.x - m2.x), 2) + Math.pow((m.y - m2.y), 2));
-          if (dist < clusterRadius) { clusterCount++; drawnMarkers.add(idx2); }
-        });
+      // MISSION_FOCUS: Only render critical SOP Violations (Suppress global green dots)
+      if (m.type === 'MISSING_INTERVAL' || m.status === 'FAIL' || m.status === 'CRITICAL') {
+        const size = 60 / scale; // Normalized to tile size
         ctx.beginPath();
-        ctx.arc(px, py, 6 + (clusterCount * 0.2), 0, Math.PI * 2);
-        ctx.fillStyle = m.type === 'INPAINTED' ? 'rgba(57, 255, 20, 0.4)' : 'rgba(230, 57, 70, 0.4)';
-        ctx.fill();
-        ctx.strokeStyle = m.type === 'INPAINTED' ? 'rgba(57, 255, 20, 0.8)' : 'rgba(230, 57, 70, 0.8)';
-        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = '#E63946';
+        ctx.lineWidth = 3 / scale;
+        ctx.rect(px, py, size, size);
         ctx.stroke();
-      } else {
-        const size = m.type === 'INPAINTED' ? 4 : 8;
-        ctx.beginPath();
-        if (m.type === 'INPAINTED') {
-          ctx.arc(px, py, size / scale, 0, Math.PI * 2);
-          ctx.fillStyle = '#39FF14';
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#39FF14';
-        } else {
-          ctx.rect(px - (size/2)/scale, py - (size/2)/scale, size/scale, size/scale);
-          ctx.strokeStyle = '#E63946';
-          ctx.lineWidth = 2 / scale;
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(230, 57, 70, 0.2)';
-        }
+        ctx.setLineDash([]);
+        
+        ctx.fillStyle = 'rgba(230, 57, 70, 0.1)';
         ctx.fill();
-        ctx.shadowBlur = 0;
+
+        if (scale > 0.4) {
+          ctx.fillStyle = '#E63946';
+          ctx.font = `bold ${Math.max(10, 14/scale)}px JetBrains Mono`;
+          ctx.fillText("! MISSING_INTERVAL", px + 5, py - 10);
+        }
       }
     });
   }, [markers]);
@@ -236,45 +224,43 @@ function App() {
 
       {/* 2. TOP HUD (Priority Z-Layer) */}
       <div className="absolute top-8 inset-x-8 flex justify-between pointer-events-none z-[200]">
-        <GlassModule className="px-8 py-5 flex items-center gap-8 pointer-events-auto border-l-4 border-l-laser-green shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
-          <div className="relative">
-             <img src="/logo.png" className="w-14 h-14 object-contain mix-blend-screen opacity-100" alt="logo" />
-             <div className="absolute inset-0 border-2 border-laser-green rounded-full animate-ping opacity-10" />
+        <div className="flex items-center gap-6 pointer-events-auto">
+          <div className="glass-module p-1 px-4 border-laser-green/50 border flex items-center gap-3 active-glow">
+             <div className="w-2 h-2 bg-laser-green rounded-full animate-pulse" />
+             <span className="text-[10px] font-black laser-text tracking-[0.2em] font-mono italic">AI-PLUS QUANTUM</span>
           </div>
-          <div className="flex flex-col border-l border-tactical-primary/30 pl-8">
-            <h1 className="text-2xl font-black uppercase tracking-tighter italic leading-none">Operation <span className="laser-text">Map-Scan</span> <span className="text-[10px] bg-laser-green text-near-black px-2 py-0.5 ml-2 font-bold not-italic">V3.0.1_BETA</span></h1>
-             <div className="flex gap-6 text-[10px] font-mono tracking-widest opacity-60 items-center mt-2 uppercase">
-                <span className="flex items-center gap-2 font-black text-laser-green"><div className="w-1.5 h-1.5 bg-laser-green rounded-full pulse" /> {AUTH_ID}::LOGGED_IN</span>
-                <span className="w-px h-3 bg-tactical-primary/40" />
-                <span className="flex items-center gap-2"><Maximize2 size={10}/> Sector_Alpha_9</span>
-             </div>
+          
+          <div className="flex flex-col">
+            <h1 className="text-3xl font-black header-title italic leading-none text-white drop-shadow-lg">
+              OPERATION <span className="laser-text">MAP-SCAN</span>
+            </h1>
           </div>
-        </GlassModule>
+        </div>
 
         <div className="flex items-center gap-5 pointer-events-auto">
           {file && (
-            <GlassModule className="px-6 py-4 text-[10px] font-black uppercase flex items-center gap-3 laser-text cursor-pointer hover:bg-laser-green/10 border border-laser-green/20" onClick={resetMap}>
-              <RotateCcw size={16} /> Wipe_Cache
-            </GlassModule>
+            <div className="glass-module px-6 py-4 text-[10px] font-black uppercase flex items-center gap-3 laser-text cursor-pointer hover:bg-laser-green/10 border border-laser-green/20" onClick={resetMap}>
+              <RotateCcw size={14} /> Wipe_Cache
+            </div>
           )}
-          <GlassModule className="px-8 py-3 flex flex-col items-end border-r-4 border-r-rose-700 bg-rose-950/10">
-            <div className="text-[10px] font-black text-rose-500 tracking-[0.3em] uppercase italic">Restricted_Access</div>
-            <div className="text-[14px] font-mono laser-text mt-1">{timestamp}_GMT</div>
-          </GlassModule>
+          <div className="glass-module px-8 py-3 flex flex-col items-end border-r-4 border-r-laser-green active-glow">
+            <div className="text-[10px] font-black text-laser-green tracking-[0.3em] uppercase italic opacity-70">Battle_Mode_Active</div>
+            <div className="text-[18px] tactical-mono laser-text mt-1 leading-none">{timestamp}</div>
+          </div>
           <button onClick={() => setIsLoggedIn(false)} className="glass-module p-5 bg-rose-900/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-xl"><Power size={24} /></button>
         </div>
       </div>
 
       {/* 3. MODULAR UTILITY BAR (Left) */}
-      <div className="absolute left-8 top-52 bottom-12 w-24 pointer-events-none z-[200]">
-        <GlassModule className="h-full flex flex-col items-center py-10 gap-12 overflow-y-auto w-full pointer-events-auto shadow-[10px_0_40px_rgba(0,0,0,0.5)]">
-           <ToolbarIcon icon={<Activity size={28}/>} active />
-           <ToolbarIcon icon={<Eye size={28}/>} />
-           <ToolbarIcon icon={<TerminalIcon size={28}/>} />
-           <ToolbarIcon icon={<Layers size={28}/>} />
-           <div className="flex-1" />
-           <ToolbarIcon icon={<Settings size={28}/>} />
-        </GlassModule>
+      <div className="absolute left-8 top-1/2 -translate-y-1/2 w-20 pointer-events-none z-[200]">
+        <div className="flex flex-col items-center py-6 gap-6 pointer-events-auto">
+           <ToolbarIcon icon={<Activity size={24}/>} active />
+           <ToolbarIcon icon={<Eye size={24}/>} />
+           <ToolbarIcon icon={<TerminalIcon size={24}/>} />
+           <ToolbarIcon icon={<Layers size={24}/>} />
+           <div className="h-20 w-px bg-white/10 my-4" />
+           <ToolbarIcon icon={<Settings size={24}/>} />
+        </div>
       </div>
 
       {/* 4. TACTICAL SOP CONSOLE (Right) */}
@@ -298,12 +284,14 @@ function App() {
                <SOPAccordionItem 
                  id="SOP-01" label="Interval_Inpaint_V5" 
                  status={isProcessing ? "SCANNING..." : (processedMap ? "SYNERGY_SYNCED" : "OPTIMAL_CORES")} 
+                 confidence={85}
                  errors={markers.filter(e => e.type === 'INPAINTED').length} 
                  isOpen={activeAccordion === 'SOP-01'} onToggle={() => setActiveAccordion('SOP-01')}
                />
                <SOPAccordionItem 
                  id="SOP-02" label="Context_Integrity" 
                  status={isProcessing ? "PROCESSING..." : (processedMap ? "ISOLATION_DONE" : "STANDBY")} 
+                 confidence={92}
                  errors={markers.filter(e => e.type === 'INTEGRITY_ERROR').length}
                  isOpen={activeAccordion === 'SOP-02'} onToggle={() => setActiveAccordion('SOP-02')}
                />
@@ -370,30 +358,49 @@ const GlassModule = ({ children, className = "", onClick }) => (
 );
 
 const ToolbarIcon = ({ icon, active }) => (
-  <button className={`p-4 rounded-xl transition-all ${active ? 'bg-laser-green/10 text-laser-green shadow-[0_0_20px_rgba(57,255,20,0.2)]' : 'text-tactical-primary opacity-60 hover:opacity-100 hover:text-laser-green'}`}>
+  <button className={`relative w-14 h-14 rounded-2xl glass-module flex items-center justify-center transition-all group ${active ? 'active-glow text-laser-green' : 'text-white/40 hover:text-white hover:border-white/20'}`}>
+    {active && <div className="absolute left-0 w-1 h-6 bg-laser-green rounded-r-full shadow-[0_0_10px_rgba(57,255,20,1)]" />}
     {icon}
   </button>
 );
 
-const SOPAccordionItem = ({ id, label, status, errors = 0, isOpen, onToggle }) => (
-  <div className={`border rounded-lg transition-all ${isOpen ? 'border-laser-green/40 bg-laser-green/5' : 'border-tactical-primary/20 hover:border-tactical-primary/50'}`}>
-    <div onClick={onToggle} className="p-3 flex justify-between items-center cursor-pointer">
+const SOPAccordionItem = ({ id, label, status, confidence = 0, errors = 0, isOpen, onToggle }) => (
+  <div className={`glass-module transition-all ${isOpen ? 'border-laser-green/40 shadow-[0_0_20px_rgba(57,255,20,0.05)]' : 'border-white/5 hover:border-white/10'}`}>
+    <div onClick={onToggle} className="p-4 flex justify-between items-center cursor-pointer">
       <div className="flex flex-col">
-        <span className="text-[7px] font-mono opacity-40 uppercase">{id}</span>
-        <span className="text-[10px] font-black uppercase tracking-tight">{label}</span>
+        <span className="text-[8px] tactical-mono opacity-40 uppercase tracking-widest">{id}</span>
+        <span className="text-[11px] font-black uppercase tracking-[0.1em]">{label}</span>
       </div>
-      <div className="flex items-center gap-2">
-         {errors > 0 && <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 rounded">{errors}</span>}
+      <div className="flex items-center gap-3">
+         {errors > 0 && <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-sm active-glow">{errors}</span>}
          <ChevronRight size={14} className={`transition-transform ${isOpen ? 'rotate-90 text-laser-green' : 'opacity-20'}`} />
       </div>
     </div>
     <AnimatePresence>
       {isOpen && (
         <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-          <div className="p-3 pt-0 border-t border-tactical-primary/10 text-[9px] font-mono leading-relaxed space-y-2 pt-3">
-             <div className="flex justify-between"><span>STATUS:</span> <span className="laser-text">{status}</span></div>
-             <div className="flex justify-between"><span>DECRYPTION:</span> <span className="opacity-60">ACTIVE_HYBRID</span></div>
-             <div className="flex justify-between"><span>ISO_COMPLIANCE:</span> <span className="opacity-60 text-emerald-400">MIL-STD-1913</span></div>
+          <div className="p-4 pt-0 border-t border-white/5 space-y-4 pt-4">
+             <div className="space-y-1">
+                <div className="flex justify-between text-[9px] tactical-mono mb-1">
+                  <span className="opacity-40">MODEL_CONFIDENCE:</span>
+                  <span className="laser-text font-black">{confidence}%</span>
+                </div>
+                <div className="segmented-progress">
+                   {[...Array(10)].map((_, i) => (
+                     <div key={i} className={`progress-segment ${i < confidence / 10 ? 'active' : ''}`} />
+                   ))}
+                </div>
+             </div>
+             <div className="text-[9px] tactical-mono leading-relaxed space-y-2">
+                <div className="flex justify-between">
+                  <span className="opacity-40">STATE:</span> 
+                  <span className="laser-text uppercase">{status}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="opacity-40">ISO_SYNC:</span> 
+                  <span className="text-emerald-400 font-bold">MIL-STD-1913</span>
+                </div>
+             </div>
           </div>
         </motion.div>
       )}

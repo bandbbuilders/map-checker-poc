@@ -1,18 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  --color-tactical-primary: #4B5320;
+  --color-tactical-primary: #14180F;
   --color-laser-green: #39FF14;
   --color-near-black: #0D0D0D;
   --color-military-red: #E63946;
+  --color-battle-olive: rgba(20, 24, 15, 0.75);
 }
 
 :root {
-  --glass-bg: rgba(13, 13, 13, 0.7);
-  --glass-border: rgba(75, 83, 32, 0.4);
-  --accent-glow: rgba(57, 255, 20, 0.3);
+  --glass-bg: rgba(20, 24, 15, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --accent-glow: rgba(57, 255, 20, 0.2);
   --font-mono: 'JetBrains Mono', monospace;
   --font-sans: 'Inter', sans-serif;
+  --font-heading: 'Inter', sans-serif; /* Wide-tracking added in CSS */
 }
 
 body {
@@ -27,16 +29,52 @@ body {
 /* --- GLASSMORPHISM CORE --- */
 .glass-module {
   background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   border: 1px solid var(--glass-border);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(57, 255, 20, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.2); /* Top-light gradient effect */
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
   border-radius: 12px;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s ease-in-out;
 }
 
 .glass-module:hover {
-  border-color: rgba(57, 255, 20, 0.4);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(57, 255, 20, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.active-glow {
+  box-shadow: 0 0 15px rgba(57, 255, 20, 0.2);
+  border-color: var(--color-laser-green) !important;
+}
+
+.segmented-progress {
+  display: flex;
+  gap: 2px;
+  height: 24px;
+  width: 100%;
+}
+
+.progress-segment {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 1px;
+}
+
+.progress-segment.active {
+  background: var(--color-laser-green);
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.3);
+}
+
+.header-title {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-weight: 800;
+  font-family: var(--font-sans);
+}
+
+.tactical-mono {
+  font-family: var(--font-mono);
+  font-weight: 700;
 }
 
 /* --- TACTICAL ANIMATIONS --- */
