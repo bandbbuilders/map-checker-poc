@@ -12,16 +12,6 @@ except ImportError:
 
 app = FastAPI()
 
-def get_endpoints(skeleton):
-    # Kernel to find endpoints
-    kernel = np.array([[1, 1, 1],
-                       [1, 10, 1],
-                       [1, 1, 1]], dtype=np.uint8)
-    filtered = cv2.filter2D(skeleton, -1, kernel)
-    # 11 = 10 (center) + 1 (neighbor)
-    endpoints = (filtered == 11).astype(np.uint8)
-    return endpoints
-
 @app.get("/api/health")
 def health():
     return {"status": "ok", "system": "PA-MIL-CV-ENGINE-V4"}
@@ -50,7 +40,7 @@ async def audit_map(file: UploadFile = File(...)):
         return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
     orig_h, orig_w, _ = img.shape
-    MAX_RES = 1200 # Capped for Vercel 10s stability
+    MAX_RES = 1200 # Capped for stability
     if orig_w > MAX_RES or orig_h > MAX_RES:
         scale = MAX_RES / max(orig_w, orig_h)
         img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -60,91 +50,59 @@ async def audit_map(file: UploadFile = File(...)):
 
     # --- COLOR SEGMENTATION (Isolate Brown/Contours) ---
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    lower_brown = np.array([5, 40, 30]) # Wider range for diverse map prints
+    lower_brown = np.array([5, 40, 30]) 
     upper_brown = np.array([35, 255, 220])
     brown_mask = cv2.inRange(hsv, lower_brown, upper_brown)
 
     errors = []
+    edge_buf = 30
 
     # --- SOP-02: FAST LINE CONTINUITY DETECTION ---
-    # We find "broken ends" by comparing the mask with its closed version
-    # and looking for "terminal" blobs
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-    closed = cv2.morphologyEx(brown_mask, cv2.MORPH_CLOSE, kernel)
-    
-    # Skeletonize the mask to find endpoints effectively
-    # Using a fast 1-pass thinning approximation
+    # We find terminal points by eroding and looking for difference
     eroded = cv2.erode(brown_mask, np.ones((3,3), np.uint8), iterations=1)
-    diff = cv2.subtract(brown_mask, eroded)
+    tips = cv2.subtract(brown_mask, eroded)
     
-    # Focus on the diff regions to find potential breaks
-    contours, _ = cv2.findContours(diff, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(tips, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
+    unique_breaks = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        if 0.5 < area < 50: # Likely an endpoint or small break
-            M = cv2.moments(cnt)
-            if M["m00"] != 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-                
-                # Check if this endpoint is truly "terminal"
-                # (lone dot on a line end)
-                roi = brown_mask[max(0, cy-10):min(h, cy+10), max(0, cx-10):min(w, cx+10)]
-                if cv2.countNonZero(roi) < 30: # It's a lonely tip!
-                    errors.append({
-                        "id": len(errors) + 1,
-                        "type": "SOP-02",
-                        "message": f"Detected Potential Line Break",
-                        "coords": f"{cx}, {cy}",
-                        "x": (cx / w) * 100,
-                        "y": (cy / h) * 100
-                    })
-                    cv2.circle(processed, (cx, cy), 15, (0, 0, 255), 2)
-    
-    # 3. Analyze endpoint clusters (lone endpoints away from edges)
-    edge_buf = 20
-    ep_y, ep_x = np.where(endpoints_img > 0)
-    
-    # We group nearby endpoints because a single "break" has two ends
-    detected_breaks = []
-    for (ex, ey) in zip(ep_x, ep_y):
-        # Filter out image edges
-        if ex < edge_buf or ex > w - edge_buf or ey < edge_buf or ey > h - edge_buf:
+        if area < 1 or area > 100: continue
+        
+        M = cv2.moments(cnt)
+        if M["m00"] == 0: continue
+        cx, cy = int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])
+        
+        # Edge filter
+        if cx < edge_buf or cx > w - edge_buf or cy < edge_buf or cy > h - edge_buf:
             continue
             
-        # Is this a "lone" endpoint? (No other endpoints very close, or part of a small island)
-        is_far = True
-        for (dx, dy) in detected_breaks:
-            if abs(dx-ex) < 15 and abs(dy-ey) < 15:
-                is_far = False
-                break
-        
-        if is_far:
-            detected_breaks.append((int(ex), int(ey)))
-            
-    # Add real errors from detected breaks
-    for i, (bx, by) in enumerate(detected_breaks[:10]): # Cap for UI performance
+        # Is it a lonely end? (Check local neighborhood in brown mask)
+        roi = brown_mask[max(0, cy-15):min(h, cy+15), max(0, cx-15):min(w, cx+15)]
+        if cv2.countNonZero(roi) < 40: 
+            # Avoid duplicates
+            if all(abs(dx-cx) > 20 or abs(dy-cy) > 20 for dx, dy in unique_breaks):
+                unique_breaks.append((cx, cy))
+
+    for i, (bx, by) in enumerate(unique_breaks[:15]):
         errors.append({
             "id": len(errors) + 1,
             "type": "SOP-02",
-            "message": f"Critical Contour Break detected @ PT-{i+1}",
+            "message": f"Line Break Anomaly detected",
             "coords": f"{bx}, {by}",
             "x": (bx / w) * 100,
             "y": (by / h) * 100
         })
-        cv2.circle(processed, (bx, by), 10, (0, 0, 255), 2)
+        cv2.circle(processed, (bx, by), 20, (0, 0, 255), 2)
 
     # --- SOP-01: CONTOUR INTERVALS (Density Check) ---
-    # Look for "dead zones" where brown density is unexpectedly low in active areas
     dist_transform = cv2.distanceTransform(brown_mask, cv2.DIST_L2, 5)
-    # Large gaps in contours show up as high values in distance transform
-    _, gap_threshold = cv2.threshold(dist_transform, 40, 255, cv2.THRESH_BINARY)
+    _, gap_threshold = cv2.threshold(dist_transform, 45, 255, cv2.THRESH_BINARY)
     gap_threshold = gap_threshold.astype(np.uint8)
     
     gap_contours, _ = cv2.findContours(gap_threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for i, cnt in enumerate(gap_contours):
-        if cv2.contourArea(cnt) > 200:
+        if 500 < cv2.contourArea(cnt) < 5000:
             gx, gy, gw, gh = cv2.boundingRect(cnt)
             cx, cy = gx + gw//2, gy + gh//2
             if cx < edge_buf or cx > w - edge_buf or cy < edge_buf or cy > h - edge_buf:
@@ -153,7 +111,7 @@ async def audit_map(file: UploadFile = File(...)):
             errors.append({
                 "id": len(errors) + 1,
                 "type": "SOP-01",
-                "message": f"Interval Violation: Sparse contour cluster",
+                "message": f"Interval Violation: Large gap between lines",
                 "coords": f"{cx}, {cy}",
                 "x": (cx / w) * 100,
                 "y": (cy / h) * 100
@@ -161,7 +119,7 @@ async def audit_map(file: UploadFile = File(...)):
             cv2.rectangle(processed, (gx, gy), (gx+gw, gy+gh), (0, 165, 255), 1)
 
     # Encode
-    _, buffer = cv2.imencode('.jpg', processed, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    _, buffer = cv2.imencode('.jpg', processed, [cv2.IMWRITE_JPEG_QUALITY, 85])
     img_str = base64.b64encode(buffer).decode('utf-8')
 
     return {
